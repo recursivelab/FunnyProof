@@ -17,19 +17,8 @@
 *                                                                              *
 *******************************************************************************/
 
+#ifndef INLINE
 
-#ifndef ERROR_H
-#define ERROR_H
+#include "language_imp.h"
 
-
-class Exception
-{
-    std::string description;
-};
-
-class CreationException : Exception
-{
-};
-
-#endif // ERROR_H
-
+#endif

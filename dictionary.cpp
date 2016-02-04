@@ -15,21 +15,8 @@
 *     You should have received a copy of the GNU General Public License        *
 *     along with this program.  If not, see <http://www.gnu.org/licenses/>.    *
 *                                                                              *
-*******************************************************************************/
+ ******************************************************************************/
 
 
-#ifndef ERROR_H
-#define ERROR_H
 
-
-class Exception
-{
-    std::string description;
-};
-
-class CreationException : Exception
-{
-};
-
-#endif // ERROR_H
-
+#include "dictionary.h"
