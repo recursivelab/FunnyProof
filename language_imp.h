@@ -645,6 +645,16 @@ uint64_t TermEnvironment::Term::id() const
     return position->symbol.id;
 }
 
+const Symbol& TermEnvironment::Term::symbol() const
+{
+    return position->symbol;
+}
+
+size_t TermEnvironment::Term::arity() const
+{
+    return position->symbol.arity;
+}
+
 bool TermEnvironment::Term::isFreeVariable(const Variable &variable) const
 {
     return position->isFreeVariable(variable);
@@ -1398,6 +1408,11 @@ bool FormulaEnvironment::Formula::operator <(const Formula &other) const
     return object < *(other.position);
 }
 
+const Symbol& FormulaEnvironment::Formula::symbol() const
+{
+    return position->symbol;
+}
+
 SymbolType FormulaEnvironment::Formula::type() const
 {
     return position->symbol.type;
@@ -1406,6 +1421,21 @@ SymbolType FormulaEnvironment::Formula::type() const
 uint64_t FormulaEnvironment::Formula::id() const
 {
     return position->symbol.id;
+}
+
+const std::vector<Term>& FormulaEnvironment::Formula::terms() const
+{
+    return position->terms;
+}
+
+const std::vector<Formula>& FormulaEnvironment::Formula::formulas() const
+{
+    return position->formulas;
+}
+
+const std::vector<Variable>& FormulaEnvironment::Formula::variables() const
+{
+    return position->variables;
 }
 
 bool FormulaEnvironment::Formula::isFreeVariable(const Variable &variable) const
@@ -1421,6 +1451,170 @@ const std::set<Variable>& FormulaEnvironment::Formula::getFreeVariables() const
 bool FormulaEnvironment::Formula::isEmpty() const
 {
     return position == emptyPosition();
+}
+
+FormulaEnvironment::Formula FormulaEnvironment::Formula::operator [](const TermEnvironment::Substitution &substitution) const
+{
+    std::map<Variable, Term> data;
+
+    switch (position->symbol.type) {
+    case NONE_SYMBOL:
+        return *this;
+
+        break;
+
+    case RELATION:
+    {
+        const std::vector<Term> &terms = position->terms;
+        std::vector<Term> result;
+
+        for (size_t i = 0; i < terms.size(); ++i) {
+            result.push_back(terms[i][substitution]);
+        }
+
+        return RelationFormula(position->symbol, result);
+    }
+
+        break;
+
+    case EQUALITY:
+    {
+        const std::vector<Term> &terms = position->terms;
+        std::vector<Term> result;
+
+        for (size_t i = 0; i < terms.size(); ++i) {
+            result.push_back(terms[i][substitution]);
+        }
+
+        return EqualityFormula(result);
+    }
+
+        break;
+
+    case NEGATION:
+        return NegationFormula(position->formulas[0][substitution]);
+
+        break;
+
+    case CONJUNCTION:
+    {
+        const std::vector<Formula> &formulas = position->formulas;
+        std::vector<Formula> result;
+
+        for (size_t i = 0; i < formulas.size(); ++i) {
+            result.push_back(formulas[i][substitution]);
+        }
+
+        return ConjunctionFormula(result);
+    }
+
+        break;
+
+    case DISJUNCTION:
+    {
+        const std::vector<Formula> &formulas = position->formulas;
+        std::vector<Formula> result;
+
+        for (size_t i = 0; i < formulas.size(); ++i) {
+            result.push_back(formulas[i][substitution]);
+        }
+
+        return DisjunctionFormula(result);
+    }
+
+        break;
+
+    case IMPLICATION:
+    {
+        const std::vector<Formula> &formulas = position->formulas;
+        std::vector<Formula> result;
+
+        for (size_t i = 0; i < formulas.size(); ++i) {
+            result.push_back(formulas[i][substitution]);
+        }
+
+        return ImplicationFormula(result);
+    }
+
+        break;
+
+    case EQUIVALENCE:
+    {
+        const std::vector<Formula> &formulas = position->formulas;
+        std::vector<Formula> result;
+
+        for (size_t i = 0; i < formulas.size(); ++i) {
+            result.push_back(formulas[i][substitution]);
+        }
+
+        return EquivalenceFormula(result);
+    }
+
+        break;
+
+    case UNIVERSAL: case EXISTENTIAL:
+    {
+        const std::set<Variable> &fv = getFreeVariables();
+
+        for (std::map<Variable, Term>::const_iterator i = substitution.data.cbegin(); i != substitution.data.cend(); ++i) {
+            Variable x = i->first;
+
+            if (fv.count(x)) {
+                data.insert(*i);
+            }
+        }
+
+        Substitution sub(std::move(data));
+        std::map<Variable, Term> s;
+        std::vector<Variable> qs;
+        std::set<Variable> occured;
+        std::vector<Variable> v = variables();
+
+        for (size_t i = 0; i < v.size(); ++i) {
+            if (occured.find(v[i]) == occured.cend()) {
+                qs.push_back(v[i]);
+                occured.insert(v[i]);
+            }
+        }
+
+        for (std::map<Variable, Term>::const_iterator i = sub.data.cbegin(); i != sub.data.cend(); ++i) {
+            Variable x = i->first;
+            Term t = i->second;
+            std::set<Variable> tv = t.getFreeVariables();
+
+            if (x != t.symbol() && fv.find(x) != fv.cend() && tv.find(x) != tv.cend()) {
+                Variable y;
+
+                s.insert(std::pair<Variable, Term>(x, Term(y)));
+            }
+        }
+
+        v.clear();
+
+        for (size_t i = 0; i < qs.size(); ++i) {
+            std::map<Variable, Term>::const_iterator pos = s.find(qs[i]);
+
+            if (pos == s.cend()) {
+                v.push_back(qs[i]);
+            } else {
+                v.push_back(pos->second.symbol());
+            }
+        }
+
+        if (type() == UNIVERSAL) {
+            return UniversalFormula(formulas()[0][s][sub], v);
+        }
+
+        return ExistentialFormula(formulas()[0][s][sub], v);
+    }
+
+        break;
+
+    default:
+        break;
+    }
+
+    throw(0);
 }
 
 const FormulaEnvironment::Formula& FormulaEnvironment::Formula::dummy()

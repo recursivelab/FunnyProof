@@ -186,7 +186,7 @@ public:
     DECLARE RelationSymbol(std::size_t arity);
     DECLARE RelationSymbol(const RelationSymbol &other);
 
-    RelationSymbol(const Symbol&) = delete;
+    RelationSymbol(const Symbol &symbol);
 };
 
 class Variable : public Symbol
@@ -250,12 +250,12 @@ private:
 public:
     class Substitution
     {
-        const std::map<Variable, Term> data;
-
     public:
         DECLARE Substitution(const std::map<Variable, Term> &valuation);
         DECLARE Substitution(std::map<Variable, Term> &&valuation);
         DECLARE Term operator ()(const Variable &variable) const;
+
+        const std::map<Variable, Term> data;
     };
 
     class Term
@@ -282,6 +282,8 @@ public:
         DECLARE bool operator <(const Term &other) const;
         DECLARE SymbolType type() const;
         DECLARE uint64_t id() const;
+        DECLARE const Symbol& symbol() const;
+        DECLARE size_t arity() const;
         DECLARE bool isFreeVariable(const Variable &variable) const;
         DECLARE const std::set<Variable>& getFreeVariables() const;
         DECLARE bool isEmpty() const;
@@ -451,11 +453,16 @@ public:
         DECLARE bool operator !=(const Formula &other) const;
         DECLARE int compare(const Formula &other) const;
         DECLARE bool operator <(const Formula &other) const;
+        DECLARE const Symbol& symbol() const;
         DECLARE SymbolType type() const;
         DECLARE uint64_t id() const;
+        DECLARE const std::vector<Term>& terms() const;
+        DECLARE const std::vector<Formula>& formulas() const;
+        DECLARE const std::vector<Variable>& variables() const;
         DECLARE bool isFreeVariable(const Variable &variable) const;
         DECLARE const std::set<Variable>& getFreeVariables() const;
         DECLARE bool isEmpty() const;
+        DECLARE Formula operator [](const TermEnvironment::Substitution &substitution) const;
         DECLARE static const Formula& dummy();
 
         friend struct RelationFormula;
