@@ -38,5 +38,5 @@ HEADERS += \
     error.h \
     language.h \
     dictionary.h \
-    language_imp.h
-
+    language_imp.h \
+    dictionary_imp.h

@@ -21,7 +21,6 @@
 #ifndef DICTIONARY_H
 #define DICTIONARY_H
 
-
 #include "language.h"
 
 
@@ -32,96 +31,25 @@ class Dictionary
         std::map<std::wstring, Symbol> names;
 
     public:
-        Environment() :
-            names()
-        {
-        }
-
-        Environment(const Environment &other) :
-            names(other.names)
-        {
-        }
-
-        Environment(Environment &&other) :
-            names(other.names)
-        {
-        }
-
-        Environment(const std::map<std::wstring, Symbol> &names) :
-            names(names)
-        {
-        }
-
-        Environment(std::map<std::wstring, Symbol> &&names) :
-            names(names)
-        {
-        }
-
-        bool insert(const std::wstring &name, const Symbol &symbol)
-        {
-            std::map<std::wstring, Symbol>::iterator i = names.find(name);
-
-            if (i == names.end()) {
-                names.emplace(std::make_pair(name, symbol));
-
-                return true;
-            }
-
-            return false;
-        }
-
-        const Symbol& operator ()(const std::wstring &name) const
-        {
-            std::map<std::wstring, Symbol>::const_iterator i = names.find(name);
-
-            if (i == names.cend()) {
-                return Symbol::dummy();
-            }
-
-            return i->second;
-        }
+        DECLARE Environment();
+        DECLARE Environment(const Environment &other);
+        DECLARE Environment(Environment &&other);
+        DECLARE Environment(const std::map<std::wstring, Symbol> &names);
+        DECLARE Environment(std::map<std::wstring, Symbol> &&names);
+        DECLARE bool insert(const std::wstring &name, const Symbol &symbol);
+        DECLARE bool insert(std::wstring &&name, const Symbol &symbol);
+        DECLARE const Symbol& operator ()(const std::wstring &name) const;
     };
 
     std::vector<Environment> environents;
 
 public:
-    Dictionary()
-    {
-        environents.resize(1);
-    }
-
-    void push()
-    {
-        environents.push_back(Environment());
-    }
-
-    bool pop()
-    {
-        if (environents.size() == 1) {
-            return false;
-        }
-
-        environents.pop_back();
-
-        return true;
-    }
-
-    Symbol operator ()(const std::wstring &name) const
-    {
-        size_t i = environents.size();
-
-        do {
-            --i;
-
-            Symbol result = environents[i](name);
-
-            if (result.type != NONE_SYMBOL) {
-                return result;
-            }
-        } while (i != 0);
-
-        return Symbol::dummy();
-    }
+    DECLARE Dictionary();
+    DECLARE void push();
+    DECLARE bool pop();
+    DECLARE Symbol operator ()(const std::wstring &name) const;
+    DECLARE bool insert(const std::wstring &name, const Symbol &symbol);
+    DECLARE bool insert(std::wstring &&name, const Symbol &symbol);
 };
 
 #endif // DICTIONARY_H

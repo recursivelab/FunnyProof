@@ -18,5 +18,8 @@
  ******************************************************************************/
 
 
+#ifndef INLINE
 
-#include "dictionary.h"
+#include "dictionary_imp.h"
+
+#endif

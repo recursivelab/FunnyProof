@@ -45,6 +45,7 @@
 #include <vector>
 #include "config.h"
 
+
 enum SymbolType
 {
     NONE_SYMBOL,
