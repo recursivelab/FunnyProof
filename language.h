@@ -41,6 +41,7 @@
 #include <atomic>
 #include <inttypes.h>
 #include <map>
+#include <memory>
 #include <set>
 #include <vector>
 #include "config.h"
@@ -186,16 +187,15 @@ class RelationSymbol : public Symbol
 public:
     DECLARE RelationSymbol(std::size_t arity);
     DECLARE RelationSymbol(const RelationSymbol &other);
-
-    RelationSymbol(const Symbol &symbol);
+    DECLARE RelationSymbol(const Symbol &symbol);
 };
 
 class Variable : public Symbol
 {
 public:
-    DECLARE Variable(const Symbol &other);
     DECLARE Variable();
     DECLARE Variable(const Variable &other);
+    DECLARE Variable(const Symbol &other);
 };
 
 class TermEnvironment
@@ -211,39 +211,42 @@ private:
         const std::vector<Term> args;
         mutable std::set<Variable> freeVariables;
         mutable bool freeVariablesComputed;
-        mutable uint64_t refs;
 
     protected:
-        DECLARE TermPrivate(Symbol symbol, const std::vector<Term> &args);
         DECLARE TermPrivate(Symbol symbol);
+        DECLARE TermPrivate(Symbol symbol, const std::vector<Term> &args);
         DECLARE TermPrivate(Symbol symbol, std::vector<Term> &&args);
 
     public:
         DECLARE TermPrivate(const TermPrivate &other);
         DECLARE TermPrivate(TermPrivate &&other);
+        DECLARE static const TermPrivate& dummy();
         DECLARE bool operator ==(const TermPrivate &other) const;
         DECLARE bool operator !=(const TermPrivate &other) const;
         DECLARE int compare(const TermPrivate &other) const;
         DECLARE bool operator <(const TermPrivate &other) const;
+        DECLARE size_t hash() const;
         DECLARE bool isFreeVariable(const Variable &variable) const;
         DECLARE const std::set<Variable>& getFreeVariables() const;
     };
 
-    class VariableTermPrivate : public TermPrivate
+    struct EmptyTermPrivate : public TermPrivate
     {
-    public:
+        DECLARE EmptyTermPrivate();
+    };
+
+    struct VariableTermPrivate : public TermPrivate
+    {
         DECLARE VariableTermPrivate(const Variable &variable);
     };
 
-    class ConstantTermPrivate : public TermPrivate
+    struct ConstantTermPrivate : public TermPrivate
     {
-    public:
         DECLARE ConstantTermPrivate(const ConstantSymbol &constant);
     };
 
-    class OperationTermPrivate : public TermPrivate
+    struct OperationTermPrivate : public TermPrivate
     {
-    public:
         DECLARE OperationTermPrivate(const OperationSymbol &operation, const std::vector<Term> &args);
         DECLARE OperationTermPrivate(const OperationSymbol &operation, std::vector<Term> &&args);
     };
@@ -261,13 +264,9 @@ public:
 
     class Term
     {
+        const std::shared_ptr<TermPrivate> termPtr;
+        const TermPrivate &term;
         Term& operator =(const Term&) = delete;
-        DECLARE static std::set<TermPrivate>& variableTerms();
-        DECLARE static std::set<TermPrivate>& constantTerms();
-        DECLARE static std::set<TermPrivate>& operationTerms();
-        DECLARE static const std::set<TermPrivate>::const_iterator insert(const TermPrivate &term);
-
-        const std::set<TermPrivate>::const_iterator position;
 
     public:
         DECLARE Term();
@@ -276,15 +275,16 @@ public:
         DECLARE Term(const ConstantSymbol &constantSymbol);
         DECLARE Term(const OperationSymbol &operationSymbol, const std::vector<Term> &args);
         DECLARE Term(const OperationSymbol &operationSymbol, std::vector<Term> &&args);
-        DECLARE ~Term();
         DECLARE bool operator ==(const Term &other) const;
         DECLARE bool operator !=(const Term &other) const;
         DECLARE int compare(const Term &other) const;
         DECLARE bool operator <(const Term &other) const;
+        DECLARE size_t hash() const;
         DECLARE SymbolType type() const;
         DECLARE uint64_t id() const;
         DECLARE const Symbol& symbol() const;
         DECLARE size_t arity() const;
+        DECLARE const std::vector<Term>& getArgs() const;
         DECLARE bool isFreeVariable(const Variable &variable) const;
         DECLARE const std::set<Variable>& getFreeVariables() const;
         DECLARE bool isEmpty() const;
@@ -293,13 +293,8 @@ public:
     };
 
     DECLARE static std::vector<Variable> oneVariable(const Variable &variable);
-    DECLARE static std::vector<Variable> oneVariable(Variable &&variable);
     DECLARE static std::vector<Term> oneTerm(const Term &term);
-    DECLARE static std::vector<Term> oneTerm(Term &&term);
     DECLARE static std::vector<Term> twoTerms(const Term &term1, const Term &term2);
-    DECLARE static std::vector<Term> twoTerms(const Term &term1, Term &&term2);
-    DECLARE static std::vector<Term> twoTerms(Term &&term1, const Term &term2);
-    DECLARE static std::vector<Term> twoTerms(Term &&term1, Term &&term2);
 };
 
 typedef TermEnvironment::Term Term;
@@ -320,7 +315,6 @@ private:
         const std::vector<Variable> variables;
         mutable std::set<Variable> freeVariables;
         mutable bool freeVariablesComputed;
-        mutable std::size_t refs;
 
         DECLARE FormulaPrivate();
         DECLARE FormulaPrivate(const Symbol &symbol, const std::vector<Term> &terms);
@@ -341,10 +335,17 @@ private:
         DECLARE bool operator <(const FormulaPrivate &other) const;
         DECLARE bool isFreeVariable(const Variable &variable) const;
         DECLARE const std::set<Variable>& getFreeVariables() const;
+        DECLARE static const FormulaPrivate& dummy();
     };
 
     DECLARE static std::vector<Formula> oneFormula(const Formula &formula);
     DECLARE static std::vector<Formula> twoFormulas(const Formula &formula1, const Formula &formula2);
+
+    class EmptyFormulaPrivate : public FormulaPrivate
+    {
+    public:
+        DECLARE EmptyFormulaPrivate();
+    };
 
     class EqualityFormulaPrivate : public FormulaPrivate
     {
@@ -429,23 +430,11 @@ public:
 
     class Formula
     {
+        const std::shared_ptr<FormulaPrivate> formulaPtr;
+        const FormulaPrivate &formula;
+
         Formula& operator =(const Formula&) = delete;
-        DECLARE static std::set<FormulaPrivate>& emptyFormulaSet();
-        DECLARE static std::set<FormulaPrivate>& equalityFormulas();
-        DECLARE static std::set<FormulaPrivate>& relationFormulas();
-        DECLARE static std::set<FormulaPrivate>& negationFormulas();
-        DECLARE static std::set<FormulaPrivate>& conjunctionFormulas();
-        DECLARE static std::set<FormulaPrivate>& disjunctionFormulas();
-        DECLARE static std::set<FormulaPrivate>& impicationFormulas();
-        DECLARE static std::set<FormulaPrivate>& equivalenceFormulas();
-        DECLARE static std::set<FormulaPrivate>& universalFormulas();
-        DECLARE static std::set<FormulaPrivate>& existentialFormulas();
-
-        const std::set<FormulaPrivate>::const_iterator position;
-
-        DECLARE static const std::set<FormulaPrivate>::const_iterator insert(const FormulaPrivate &formula);
-        DECLARE Formula(const std::set<FormulaPrivate>::const_iterator &position);
-        DECLARE static const std::set<FormulaPrivate>::const_iterator& emptyPosition();
+        DECLARE Formula(FormulaPrivate *formulaPtr);
 
     public:
         DECLARE Formula();
@@ -475,6 +464,11 @@ public:
         friend struct EquivalenceFormula;
         friend struct UniversalFormula;
         friend struct ExistentialFormula;
+    };
+
+    struct EmptyFormula : public Formula
+    {
+        DECLARE EmptyFormula();
     };
 
     struct RelationFormula : public Formula

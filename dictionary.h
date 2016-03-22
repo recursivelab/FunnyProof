@@ -28,17 +28,21 @@ class Dictionary
 {
     class Environment
     {
-        std::map<std::wstring, Symbol> names;
+        std::map<std::wstring, Symbol> symbols;
+        std::map<Symbol, std::wstring> names;
 
     public:
         DECLARE Environment();
         DECLARE Environment(const Environment &other);
         DECLARE Environment(Environment &&other);
-        DECLARE Environment(const std::map<std::wstring, Symbol> &names);
-        DECLARE Environment(std::map<std::wstring, Symbol> &&names);
+        DECLARE Environment(const std::map<std::wstring, Symbol> &symbols);
+        DECLARE Environment(std::map<std::wstring, Symbol> &&symbols);
         DECLARE bool insert(const std::wstring &name, const Symbol &symbol);
         DECLARE bool insert(std::wstring &&name, const Symbol &symbol);
         DECLARE const Symbol& operator ()(const std::wstring &name) const;
+        DECLARE std::wstring operator ()(const Symbol &symbol) const;
+        DECLARE const std::map<std::wstring, Symbol>& getSymbols() const;
+        DECLARE const std::map<Symbol, std::wstring>& getNames() const;
     };
 
     std::vector<Environment> environents;
@@ -48,8 +52,13 @@ public:
     DECLARE void push();
     DECLARE bool pop();
     DECLARE Symbol operator ()(const std::wstring &name) const;
+    DECLARE std::wstring operator ()(const Symbol &symbol) const;
+    DECLARE const Environment& getCurrentEnvironment() const;
+    DECLARE const std::vector<Environment>& getEnvironments() const;
     DECLARE bool insert(const std::wstring &name, const Symbol &symbol);
     DECLARE bool insert(std::wstring &&name, const Symbol &symbol);
+    DECLARE std::wstring operator ()(const Term &term) const;
+    DECLARE std::wstring operator ()(const Formula &formula) const;
 };
 
 #endif // DICTIONARY_H

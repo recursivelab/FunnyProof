@@ -256,10 +256,10 @@ RelationSymbol::RelationSymbol(const RelationSymbol &other) :
 {
 }
 
-Variable::Variable(const Symbol &other) :
-    Symbol(other)
+RelationSymbol::RelationSymbol(const Symbol &symbol) :
+    Symbol(symbol)
 {
-    if (other.type != VARIABLE) {
+    if (symbol.type != RELATION) {
         throw(0);
     }
 }
@@ -274,14 +274,10 @@ Variable::Variable(const Variable &other) :
 {
 }
 
-TermEnvironment::TermPrivate::TermPrivate(Symbol symbol, const std::vector<Term> &args) :
-    symbol(symbol),
-    args(args),
-    freeVariables(),
-    freeVariablesComputed(symbol.type == CONSTANT),
-    refs(1)
+Variable::Variable(const Symbol &other) :
+    Symbol(other)
 {
-    if (args.size() != symbol.arity) {
+    if (other.type != VARIABLE) {
         throw(0);
     }
 }
@@ -290,17 +286,26 @@ TermEnvironment::TermPrivate::TermPrivate(Symbol symbol) :
     symbol(symbol),
     args(),
     freeVariables(),
-    freeVariablesComputed(symbol.type == CONSTANT),
-    refs(1)
+    freeVariablesComputed(symbol.type == CONSTANT)
 {
+}
+
+TermEnvironment::TermPrivate::TermPrivate(Symbol symbol, const std::vector<Term> &args) :
+    symbol(symbol),
+    args(args),
+    freeVariables(),
+    freeVariablesComputed(symbol.type == CONSTANT)
+{
+    if (args.size() != symbol.arity) {
+        throw(0);
+    }
 }
 
 TermEnvironment::TermPrivate::TermPrivate(Symbol symbol, std::vector<Term> &&args) :
     symbol(symbol),
     args(std::move(args)),
     freeVariables(),
-    freeVariablesComputed(symbol.type == CONSTANT),
-    refs(1)
+    freeVariablesComputed(symbol.type == CONSTANT)
 {
     if (args.size() != symbol.arity) {
         throw(0);
@@ -311,8 +316,7 @@ TermEnvironment::TermPrivate::TermPrivate(const TermPrivate &other) :
     symbol(other.symbol),
     args(other.args),
     freeVariables(other.freeVariables),
-    freeVariablesComputed(other.freeVariablesComputed),
-    refs(other.refs)
+    freeVariablesComputed(other.freeVariablesComputed)
 {
 }
 
@@ -320,9 +324,15 @@ TermEnvironment::TermPrivate::TermPrivate(TermPrivate &&other) :
     symbol(other.symbol),
     args(std::move(other.args)),
     freeVariables(std::move(other.freeVariables)),
-    freeVariablesComputed(other.freeVariablesComputed),
-    refs(other.refs)
+    freeVariablesComputed(other.freeVariablesComputed)
 {
+}
+
+const TermEnvironment::TermPrivate& TermEnvironment::TermPrivate::dummy()
+{
+    thread_local static EmptyTermPrivate result;
+
+    return result;
 }
 
 bool TermEnvironment::TermPrivate::operator ==(const TermPrivate &other) const
@@ -361,6 +371,14 @@ int TermEnvironment::TermPrivate::compare(const TermPrivate &other) const
         return result;
     }
 
+    if (args.size() < other.args.size()) {
+        return -1;
+    }
+
+    if (args.size() > other.args.size()) {
+        return 1;
+    }
+
     for (std::size_t i = 0; i < args.size(); ++i) {
         result = args[i].compare(other.args[i]);
 
@@ -377,9 +395,25 @@ bool TermEnvironment::TermPrivate::operator <(const TermPrivate &other) const
    return compare(other) < 0;
 }
 
+size_t TermEnvironment::TermPrivate::hash() const
+{
+    size_t result = symbol.id;
+
+    for (size_t i = 0; i < args.size(); ++i) {
+        result ^= args[i].hash();
+    }
+
+    return result;
+}
+
 bool TermEnvironment::TermPrivate::isFreeVariable(const Variable &variable) const
 {
     switch (symbol.id) {
+    case NONE_SYMBOL:
+        return false;
+
+        break;
+
     case VARIABLE:
         return symbol == variable;
 
@@ -412,20 +446,24 @@ const std::set<Variable>& TermEnvironment::TermPrivate::getFreeVariables() const
 {
     if (freeVariablesComputed == false) {
         switch (symbol.type) {
+        case NONE_SYMBOL: case CONSTANT:
+            break;
+
         case VARIABLE:
             freeVariables.insert(symbol);
 
             break;
 
         case OPERATION:
-            for (std::size_t i = 0; i < args.size(); ++i) {
-                const std::set<Variable> &variables = args[i].getFreeVariables();
+            for (size_t i = 0; i < args.size(); ++i) {
+                const std::set<Variable> variables = args[i].getFreeVariables();
 
                 freeVariables.insert(variables.cbegin(), variables.cend());
             }
 
+            break;
         default:
-            throw(0);
+            throw(1);
 
             break;
         }
@@ -434,6 +472,11 @@ const std::set<Variable>& TermEnvironment::TermPrivate::getFreeVariables() const
     }
 
     return freeVariables;
+}
+
+TermEnvironment::EmptyTermPrivate::EmptyTermPrivate() :
+    TermPrivate(Symbol::dummy())
+{
 }
 
 TermEnvironment::VariableTermPrivate::VariableTermPrivate(const Variable &variable) :
@@ -477,131 +520,44 @@ TermEnvironment::Term TermEnvironment::Substitution::operator ()(const Variable 
     return Term(variable);
 }
 
-std::set<TermEnvironment::TermPrivate>& TermEnvironment::Term::variableTerms()
-{
-    thread_local static std::set<TermPrivate> object;
-
-    return object;
-}
-
-std::set<TermEnvironment::TermPrivate>& TermEnvironment::Term::constantTerms()
-{
-    thread_local static std::set<TermPrivate> object;
-
-    return object;
-}
-
-std::set<TermEnvironment::TermPrivate>& TermEnvironment::Term::operationTerms()
-{
-    thread_local static std::set<TermPrivate> object;
-
-    return object;
-}
-
-const std::set<TermEnvironment::TermPrivate>::const_iterator TermEnvironment::Term::insert(const TermPrivate &term)
-{
-    thread_local static std::pair<std::set<TermPrivate>::const_iterator, bool> pair;
-    std::set<TermPrivate> *termsSet;
-
-    switch (term.symbol.type) {
-    case VARIABLE:
-        termsSet = &variableTerms();
-
-        break;
-
-    case CONSTANT:
-        termsSet = &constantTerms();
-
-        break;
-
-    case OPERATION:
-        termsSet = &operationTerms();
-
-        break;
-
-    default:
-        throw(0);
-
-        break;
-    }
-
-    pair = termsSet->insert(term);
-
-    if (pair.second == false) {
-        ++(pair.first->refs);
-    }
-
-    return pair.first;
-}
-
 TermEnvironment::Term::Term() :
-    position()
+    term(TermPrivate::dummy())
 {
 }
 
 TermEnvironment::Term::Term(const Term &other) :
-    position(other.position)
+    termPtr(other.termPtr),
+    term(other.term)
 {
 }
 
 TermEnvironment::Term::Term(const Variable &variable) :
-    position(insert(VariableTermPrivate(variable)))
+    termPtr(new VariableTermPrivate(variable)),
+    term(*termPtr)
 {
 }
 
 TermEnvironment::Term::Term(const ConstantSymbol &constantSymbol) :
-    position(insert(ConstantTermPrivate(constantSymbol)))
+    termPtr(new ConstantTermPrivate(constantSymbol)),
+    term(*termPtr)
 {
 }
 
 TermEnvironment::Term::Term(const OperationSymbol &operationSymbol, const std::vector<Term> &args) :
-    position(insert(OperationTermPrivate(operationSymbol, args)))
+    termPtr(new OperationTermPrivate(operationSymbol, args)),
+    term(*termPtr)
 {
 }
 
 TermEnvironment::Term::Term(const OperationSymbol &operationSymbol, std::vector<Term> &&args) :
-    position(insert(OperationTermPrivate(operationSymbol, args)))
+    termPtr(new OperationTermPrivate(operationSymbol, args)),
+    term(*termPtr)
 {
-}
-
-TermEnvironment::Term::~Term()
-{
-    const TermPrivate *data = &*position;
-
-    if (data != nullptr && --(data->refs) == 0) {
-        switch (data->symbol.id) {
-        case VARIABLE:
-            variableTerms().erase(position);
-
-            break;
-
-        case CONSTANT:
-            constantTerms().erase(position);
-
-            break;
-
-        case OPERATION:
-            operationTerms().erase(position);
-
-            break;
-
-        default:
-            break;
-        }
-    }
 }
 
 bool TermEnvironment::Term::operator ==(const Term &other) const
 {
-    if (isEmpty()) {
-        return other.isEmpty();
-    }
-
-    if (other.isEmpty()) {
-        return false;
-    }
-
-    return position == other.position;
+    return term == other.term;
 }
 
 bool TermEnvironment::Term::operator !=(const Term &other) const
@@ -611,72 +567,64 @@ bool TermEnvironment::Term::operator !=(const Term &other) const
 
 int TermEnvironment::Term::compare(const Term &other) const
 {
-    if (isEmpty()) {
-        return other.isEmpty() ? 0 : -1;
-    }
-
-    if (other.isEmpty()) {
-        return 1;
-    }
-
-    return position->compare(*other.position);
+    return term.compare(other.term);
 }
 
 bool TermEnvironment::Term::operator <(const Term &other) const
 {
-    if (isEmpty()) {
-        return other.isEmpty() == false;
-    }
+    return term.compare(other.term) < 0;
+}
 
-    if (other.isEmpty()) {
-        return false;
-    }
-
-    return position->symbol < other.position->symbol;
+size_t TermEnvironment::Term::hash() const
+{
+    return term.hash();
 }
 
 SymbolType TermEnvironment::Term::type() const
 {
-    return position->symbol.type;
+    return term.symbol.type;
 }
 
 uint64_t TermEnvironment::Term::id() const
 {
-    return position->symbol.id;
+    return term.symbol.id;
 }
 
 const Symbol& TermEnvironment::Term::symbol() const
 {
-    return position->symbol;
+    return term.symbol;
 }
 
 size_t TermEnvironment::Term::arity() const
 {
-    return position->symbol.arity;
+    return term.symbol.arity;
+}
+
+const std::vector<TermEnvironment::Term>& TermEnvironment::Term::getArgs() const
+{
+    return term.args;
 }
 
 bool TermEnvironment::Term::isFreeVariable(const Variable &variable) const
 {
-    return position->isFreeVariable(variable);
+    return term.isFreeVariable(variable);
 }
 
 const std::set<Variable>& TermEnvironment::Term::getFreeVariables() const
 {
-    return position->getFreeVariables();
+    return term.getFreeVariables();
 }
 
 bool TermEnvironment::Term::isEmpty() const
 {
-    return &*position == nullptr;
+    return false;
 }
 
 TermEnvironment::Term TermEnvironment::Term::operator [](const Substitution &valuation) const
 {
     if (isEmpty()) {
-        return Term();
+        return *this;
     }
-
-    const TermPrivate &term = *position;
 
     switch (term.symbol.type) {
     case VARIABLE:
@@ -692,11 +640,12 @@ TermEnvironment::Term TermEnvironment::Term::operator [](const Substitution &val
     case OPERATION:
         {
             std::vector<Term> args;
+
             for (size_t i = 0; i < term.args.size(); ++i) {
                 args.push_back(term.args[i][valuation]);
             }
 
-            return Term(term.symbol, args);
+            return Term(term.symbol, std::move(args));
 
             break;
         }
@@ -709,7 +658,7 @@ TermEnvironment::Term TermEnvironment::Term::operator [](const Substitution &val
 
 const TermEnvironment::Term& TermEnvironment::Term::dummy()
 {
-    static Term result;
+    thread_local static Term result;
 
     return result;
 }
@@ -723,25 +672,7 @@ std::vector<Variable> TermEnvironment::oneVariable(const Variable &variable)
     return result;
 }
 
-std::vector<Variable> TermEnvironment::oneVariable(Variable &&variable)
-{
-    std::vector<Variable> result;
-
-    result.push_back(variable);
-
-    return result;
-}
-
 std::vector<TermEnvironment::Term> TermEnvironment::oneTerm(const TermEnvironment::Term &term)
-{
-    std::vector<Term> result;
-
-    result.push_back(term);
-
-    return result;
-}
-
-std::vector<TermEnvironment::Term> TermEnvironment::oneTerm(TermEnvironment::Term &&term)
 {
     std::vector<Term> result;
 
@@ -760,36 +691,6 @@ std::vector<TermEnvironment::Term> TermEnvironment::twoTerms(const TermEnvironme
     return result;
 }
 
-std::vector<TermEnvironment::Term> TermEnvironment::twoTerms(const TermEnvironment::Term &term1, TermEnvironment::Term &&term2)
-{
-    std::vector<Term> result;
-
-    result.push_back(term1);
-    result.push_back(term2);
-
-    return result;
-}
-
-std::vector<TermEnvironment::Term> TermEnvironment::twoTerms(TermEnvironment::Term &&term1, const TermEnvironment::Term &term2)
-{
-    std::vector<Term> result;
-
-    result.push_back(term1);
-    result.push_back(term2);
-
-    return result;
-}
-
-std::vector<TermEnvironment::Term> TermEnvironment::twoTerms(TermEnvironment::Term &&term1, TermEnvironment::Term &&term2)
-{
-    std::vector<Term> result;
-
-    result.push_back(term1);
-    result.push_back(term2);
-
-    return result;
-}
-
 FormulaEnvironment::FormulaPrivate::FormulaPrivate() :
     symbol(Symbol::dummy())
 {
@@ -799,8 +700,7 @@ FormulaEnvironment::FormulaPrivate::FormulaPrivate(const Symbol &symbol, const s
     symbol(symbol),
     terms(terms),
     freeVariables(),
-    freeVariablesComputed(false),
-    refs(1)
+    freeVariablesComputed(false)
 {
 }
 
@@ -808,8 +708,7 @@ FormulaEnvironment::FormulaPrivate::FormulaPrivate(const Symbol &symbol, std::ve
     symbol(symbol),
     terms(terms),
     freeVariables(),
-    freeVariablesComputed(false),
-    refs(1)
+    freeVariablesComputed(false)
 {
 }
 
@@ -817,8 +716,7 @@ FormulaEnvironment::FormulaPrivate::FormulaPrivate(const Symbol &symbol, const s
     symbol(symbol),
     formulas(formulas),
     freeVariables(),
-    freeVariablesComputed(false),
-    refs(1)
+    freeVariablesComputed(false)
 {
 }
 
@@ -826,8 +724,7 @@ FormulaEnvironment::FormulaPrivate::FormulaPrivate(const Symbol &symbol, std::ve
     symbol(symbol),
     formulas(formulas),
     freeVariables(),
-    freeVariablesComputed(false),
-    refs(1)
+    freeVariablesComputed(false)
 {
 }
 
@@ -836,8 +733,7 @@ FormulaEnvironment::FormulaPrivate::FormulaPrivate(const Symbol &symbol, const F
     formulas(oneFormula(formula)),
     variables(variables),
     freeVariables(),
-    freeVariablesComputed(false),
-    refs(1)
+    freeVariablesComputed(false)
 {
 }
 
@@ -846,8 +742,7 @@ FormulaEnvironment::FormulaPrivate::FormulaPrivate(const Symbol &symbol, const F
     formulas(oneFormula(formula)),
     variables(variables),
     freeVariables(),
-    freeVariablesComputed(false),
-    refs(1)
+    freeVariablesComputed(false)
 {
 }
 
@@ -856,8 +751,7 @@ FormulaEnvironment::FormulaPrivate::FormulaPrivate(const Symbol &symbol, const s
     terms(terms),
     formulas(formulas),
     freeVariables(),
-    freeVariablesComputed(false),
-    refs(1)
+    freeVariablesComputed(false)
 {
 }
 
@@ -866,8 +760,7 @@ FormulaEnvironment::FormulaPrivate::FormulaPrivate(const Symbol &symbol, std::ve
     terms(terms),
     formulas(formulas),
     freeVariables(),
-    freeVariablesComputed(false),
-    refs(1)
+    freeVariablesComputed(false)
 {
 }
 
@@ -876,8 +769,7 @@ FormulaEnvironment::FormulaPrivate::FormulaPrivate(const Symbol &symbol, std::ve
     terms(terms),
     formulas(formulas),
     freeVariables(),
-    freeVariablesComputed(false),
-    refs(1)
+    freeVariablesComputed(false)
 {
 }
 
@@ -886,8 +778,7 @@ FormulaEnvironment::FormulaPrivate::FormulaPrivate(const FormulaPrivate &other) 
     terms(other.terms),
     formulas(other.formulas),
     freeVariables(),
-    freeVariablesComputed(false),
-    refs(1)
+    freeVariablesComputed(false)
 {
 }
 
@@ -896,8 +787,7 @@ FormulaEnvironment::FormulaPrivate::FormulaPrivate(FormulaPrivate &&other) :
     terms(std::move(other.terms)),
     formulas(std::move(other.formulas)),
     freeVariables(std::move(other.freeVariables)),
-    freeVariablesComputed(other.freeVariablesComputed),
-    refs(1)
+    freeVariablesComputed(other.freeVariablesComputed)
 {
 }
 
@@ -970,6 +860,11 @@ bool FormulaEnvironment::FormulaPrivate::operator <(const FormulaPrivate &other)
 bool FormulaEnvironment::FormulaPrivate::isFreeVariable(const Variable &variable) const
 {
     switch (symbol.type) {
+    case NONE_SYMBOL:
+        return false;
+
+        break;
+
     case EQUALITY:
     case RELATION:
         for (size_t i = 0; i < terms.size(); ++i) {
@@ -1021,10 +916,11 @@ const std::set<Variable>& FormulaEnvironment::FormulaPrivate::getFreeVariables()
 {
     if (freeVariablesComputed == false) {
         switch (symbol.type) {
+        case NONE_SYMBOL:
+            break;
+
         case EQUALITY:
         case RELATION:
-            freeVariables.clear();
-
             for (size_t i = 0; i < terms.size(); ++i) {
                 const std::set<Variable> &variables = terms[i].getFreeVariables();
 
@@ -1038,8 +934,6 @@ const std::set<Variable>& FormulaEnvironment::FormulaPrivate::getFreeVariables()
         case DISJUNCTION:
         case IMPLICATION:
         case EQUIVALENCE:
-            freeVariables.clear();
-
             for (size_t i = 0; i < formulas.size(); ++i) {
                 const std::set<Variable> &variables = formulas[i].getFreeVariables();
 
@@ -1050,8 +944,6 @@ const std::set<Variable>& FormulaEnvironment::FormulaPrivate::getFreeVariables()
 
         case UNIVERSAL:
         case EXISTENTIAL:
-            freeVariables.clear();
-
             for (size_t i = 0; i < formulas.size(); ++i) {
                 const std::set<Variable> &variables = formulas[i].getFreeVariables();
 
@@ -1074,6 +966,17 @@ const std::set<Variable>& FormulaEnvironment::FormulaPrivate::getFreeVariables()
     }
 
     return freeVariables;
+}
+
+const FormulaEnvironment::FormulaPrivate& FormulaEnvironment::FormulaPrivate::dummy()
+{
+    static const EmptyFormulaPrivate result;
+
+    return result;
+}
+
+FormulaEnvironment::EmptyFormulaPrivate::EmptyFormulaPrivate()
+{
 }
 
 std::vector<FormulaEnvironment::Formula> FormulaEnvironment::oneFormula(const Formula &formula)
@@ -1221,243 +1124,93 @@ FormulaEnvironment::ExistentialFormulaPrivate::ExistentialFormulaPrivate(const F
 {
 }
 
-std::set<FormulaEnvironment::FormulaPrivate>& FormulaEnvironment::Formula::emptyFormulaSet()
+FormulaEnvironment::Formula::Formula(FormulaPrivate *formulaPtr) :
+    formulaPtr(formulaPtr),
+    formula(*formulaPtr)
 {
-    static std::set<FormulaPrivate> result;
-
-    result.insert(FormulaPrivate());
-
-    return result;
-}
-
-std::set<FormulaEnvironment::FormulaPrivate>& FormulaEnvironment::Formula::equalityFormulas()
-{
-    thread_local static std::set<FormulaPrivate> result;
-
-    return result;
-}
-
-std::set<FormulaEnvironment::FormulaPrivate>& FormulaEnvironment::Formula::relationFormulas()
-{
-    thread_local static std::set<FormulaPrivate> result;
-
-    return result;
-}
-
-std::set<FormulaEnvironment::FormulaPrivate>& FormulaEnvironment::Formula::negationFormulas()
-{
-    thread_local static std::set<FormulaPrivate> result;
-
-    return result;
-}
-
-std::set<FormulaEnvironment::FormulaPrivate>& FormulaEnvironment::Formula::conjunctionFormulas()
-{
-    thread_local static std::set<FormulaPrivate> result;
-
-    return result;
-}
-
-std::set<FormulaEnvironment::FormulaPrivate>& FormulaEnvironment::Formula::disjunctionFormulas()
-{
-    thread_local static std::set<FormulaPrivate> result;
-
-    return result;
-}
-
-std::set<FormulaEnvironment::FormulaPrivate>& FormulaEnvironment::Formula::impicationFormulas()
-{
-    thread_local static std::set<FormulaPrivate> result;
-
-    return result;
-}
-
-std::set<FormulaEnvironment::FormulaPrivate>& FormulaEnvironment::Formula::equivalenceFormulas()
-{
-    thread_local static std::set<FormulaPrivate> result;
-
-    return result;
-}
-
-std::set<FormulaEnvironment::FormulaPrivate>& FormulaEnvironment::Formula::universalFormulas()
-{
-    thread_local static std::set<FormulaPrivate> result;
-
-    return result;
-}
-
-std::set<FormulaEnvironment::FormulaPrivate>& FormulaEnvironment::Formula::existentialFormulas()
-{
-    thread_local static std::set<FormulaPrivate> result;
-
-    return result;
-}
-
-const std::set<FormulaEnvironment::FormulaPrivate>::const_iterator FormulaEnvironment::Formula::insert(const FormulaPrivate &formula)
-{
-    thread_local static std::pair<std::set<FormulaPrivate>::const_iterator, bool> pair;
-    std::set<FormulaPrivate> *formulasSet;
-
-    switch (formula.symbol.type) {
-    case RELATION:
-        formulasSet = &relationFormulas();
-
-    case EQUALITY:
-        formulasSet = &equalityFormulas();
-
-        break;
-    case NEGATION:
-        formulasSet = &negationFormulas();
-
-        break;
-
-    case CONJUNCTION:
-        formulasSet = &conjunctionFormulas();
-
-        break;
-
-    case DISJUNCTION:
-        formulasSet = &disjunctionFormulas();
-
-        break;
-
-    case IMPLICATION:
-        formulasSet = &impicationFormulas();
-
-        break;
-
-    case EQUIVALENCE:
-        formulasSet = &equivalenceFormulas();
-
-        break;
-
-    case UNIVERSAL:
-        formulasSet = &universalFormulas();
-
-        break;
-
-    case EXISTENTIAL:
-        formulasSet = &existentialFormulas();
-
-        break;
-
-    default:
-        throw(0);
-
-        break;
-    }
-
-    pair = formulasSet->insert(formula);
-
-    if (pair.second == false) {
-        ++(pair.first->refs);
-    }
-
-    return pair.first;
-}
-
-const std::set<FormulaEnvironment::FormulaPrivate>::const_iterator& FormulaEnvironment::Formula::emptyPosition()
-{
-    static std::set<FormulaPrivate>::const_iterator result(
-                []() -> std::set<FormulaPrivate>::const_iterator {
-                    std::set<FormulaPrivate> set;
-                    set.insert(FormulaPrivate());
-
-                    return set.cbegin();
-                }());
-
-    return result;
 }
 
 FormulaEnvironment::Formula::Formula() :
-    position(emptyPosition())
+    formula(FormulaPrivate::dummy())
 {
 }
 
-FormulaEnvironment::Formula::Formula(const Formula &other)
+FormulaEnvironment::Formula::Formula(const Formula &other) :
+    formulaPtr(other.formulaPtr),
+    formula(formula)
 {
-    if (other.isEmpty()) {
-        return;
-    }
-
-    ++(other.position->refs);
-    const_cast<std::set<FormulaPrivate>::const_iterator&>(position) = other.position;
 }
 
 bool FormulaEnvironment::Formula::operator ==(const Formula &other) const
 {
-    return position == other.position;
+    return formula == other.formula;
 }
 
 bool FormulaEnvironment::Formula::operator !=(const Formula &other) const
 {
-    return position != other.position;
+    return operator ==(other) == false;
 }
 
 int FormulaEnvironment::Formula::compare(const Formula &other) const
 {
-    const FormulaPrivate &object = *position;
-
-    return object.compare(*(other.position));
+    return formula.compare(other.formula);
 }
 
 bool FormulaEnvironment::Formula::operator <(const Formula &other) const
 {
-    const FormulaPrivate &object = *position;
-
-    return object < *(other.position);
+    return compare(other) < 0;
 }
 
 const Symbol& FormulaEnvironment::Formula::symbol() const
 {
-    return position->symbol;
+    return formula.symbol;
 }
 
 SymbolType FormulaEnvironment::Formula::type() const
 {
-    return position->symbol.type;
+    return formula.symbol.type;
 }
 
 uint64_t FormulaEnvironment::Formula::id() const
 {
-    return position->symbol.id;
+    return formula.symbol.id;
 }
 
 const std::vector<Term>& FormulaEnvironment::Formula::terms() const
 {
-    return position->terms;
+    return formula.terms;
 }
 
 const std::vector<Formula>& FormulaEnvironment::Formula::formulas() const
 {
-    return position->formulas;
+    return formula.formulas;
 }
 
 const std::vector<Variable>& FormulaEnvironment::Formula::variables() const
 {
-    return position->variables;
+    return formula.variables;
 }
 
 bool FormulaEnvironment::Formula::isFreeVariable(const Variable &variable) const
 {
-    return position->isFreeVariable(variable);
+    return formula.isFreeVariable(variable);
 }
 
 const std::set<Variable>& FormulaEnvironment::Formula::getFreeVariables() const
 {
-    return position->getFreeVariables();
+    return formula.getFreeVariables();
 }
 
 bool FormulaEnvironment::Formula::isEmpty() const
 {
-    return position == emptyPosition();
+    return formula.symbol.type == NONE_SYMBOL;
 }
 
 FormulaEnvironment::Formula FormulaEnvironment::Formula::operator [](const TermEnvironment::Substitution &substitution) const
 {
     std::map<Variable, Term> data;
 
-    switch (position->symbol.type) {
+    switch (formula.symbol.type) {
     case NONE_SYMBOL:
         return *this;
 
@@ -1465,89 +1218,89 @@ FormulaEnvironment::Formula FormulaEnvironment::Formula::operator [](const TermE
 
     case RELATION:
     {
-        const std::vector<Term> &terms = position->terms;
+        const std::vector<Term> &terms = formula.terms;
         std::vector<Term> result;
 
         for (size_t i = 0; i < terms.size(); ++i) {
             result.push_back(terms[i][substitution]);
         }
 
-        return RelationFormula(position->symbol, result);
+        return RelationFormula(formula.symbol, std::move(result));
     }
 
         break;
 
     case EQUALITY:
     {
-        const std::vector<Term> &terms = position->terms;
+        const std::vector<Term> &terms = formula.terms;
         std::vector<Term> result;
 
         for (size_t i = 0; i < terms.size(); ++i) {
             result.push_back(terms[i][substitution]);
         }
 
-        return EqualityFormula(result);
+        return EqualityFormula(std::move(result));
     }
 
         break;
 
     case NEGATION:
-        return NegationFormula(position->formulas[0][substitution]);
+        return NegationFormula(formula.formulas[0][substitution]);
 
         break;
 
     case CONJUNCTION:
     {
-        const std::vector<Formula> &formulas = position->formulas;
+        const std::vector<Formula> &formulas = formula.formulas;
         std::vector<Formula> result;
 
         for (size_t i = 0; i < formulas.size(); ++i) {
             result.push_back(formulas[i][substitution]);
         }
 
-        return ConjunctionFormula(result);
+        return ConjunctionFormula(std::move(result));
     }
 
         break;
 
     case DISJUNCTION:
     {
-        const std::vector<Formula> &formulas = position->formulas;
+        const std::vector<Formula> &formulas = formula.formulas;
         std::vector<Formula> result;
 
         for (size_t i = 0; i < formulas.size(); ++i) {
             result.push_back(formulas[i][substitution]);
         }
 
-        return DisjunctionFormula(result);
+        return DisjunctionFormula(std::move(result));
     }
 
         break;
 
     case IMPLICATION:
     {
-        const std::vector<Formula> &formulas = position->formulas;
+        const std::vector<Formula> &formulas = formula.formulas;
         std::vector<Formula> result;
 
         for (size_t i = 0; i < formulas.size(); ++i) {
             result.push_back(formulas[i][substitution]);
         }
 
-        return ImplicationFormula(result);
+        return ImplicationFormula(std::move(result));
     }
 
         break;
 
     case EQUIVALENCE:
     {
-        const std::vector<Formula> &formulas = position->formulas;
+        const std::vector<Formula> &formulas = formula.formulas;
         std::vector<Formula> result;
 
         for (size_t i = 0; i < formulas.size(); ++i) {
             result.push_back(formulas[i][substitution]);
         }
 
-        return EquivalenceFormula(result);
+        return EquivalenceFormula(std::move(result));
     }
 
         break;
@@ -1555,57 +1308,43 @@ FormulaEnvironment::Formula FormulaEnvironment::Formula::operator [](const TermE
     case UNIVERSAL: case EXISTENTIAL:
     {
         const std::set<Variable> &fv = getFreeVariables();
+        const std::vector<Variable> &v = variables();
+        std::vector<Variable> qs;
+        std::set<Variable> tfv;
+        std::set<Variable> bounded;
+
+        for (size_t i = 0; i < v.size(); ++i) {
+            bounded.insert(v[i]);
+        }
 
         for (std::map<Variable, Term>::const_iterator i = substitution.data.cbegin(); i != substitution.data.cend(); ++i) {
             Variable x = i->first;
 
             if (fv.count(x)) {
-                data.insert(*i);
+                const std::set<Variable> &tv = (i->second).getFreeVariables();
+
+                tfv.insert(tv.cbegin(), tv.cend());
             }
         }
 
-        Substitution sub(std::move(data));
-        std::map<Variable, Term> s;
-        std::vector<Variable> qs;
-        std::set<Variable> occured;
-        std::vector<Variable> v = variables();
-
-        for (size_t i = 0; i < v.size(); ++i) {
-            if (occured.find(v[i]) == occured.cend()) {
-                qs.push_back(v[i]);
-                occured.insert(v[i]);
-            }
-        }
-
-        for (std::map<Variable, Term>::const_iterator i = sub.data.cbegin(); i != sub.data.cend(); ++i) {
-            Variable x = i->first;
-            Term t = i->second;
-            std::set<Variable> tv = t.getFreeVariables();
-
-            if (x != t.symbol() && fv.find(x) != fv.cend() && tv.find(x) != tv.cend()) {
+        for (std::set<Variable>::const_iterator i = bounded.cbegin(); i != bounded.cend(); ++i) {
+            if (tfv.count(*i)) {
                 Variable y;
+                Term t(y);
 
-                s.insert(std::pair<Variable, Term>(x, Term(y)));
-            }
-        }
-
-        v.clear();
-
-        for (size_t i = 0; i < qs.size(); ++i) {
-            std::map<Variable, Term>::const_iterator pos = s.find(qs[i]);
-
-            if (pos == s.cend()) {
-                v.push_back(qs[i]);
+                data.insert(std::pair<Variable, Term>(*i, t));
+                qs.push_back(y);
             } else {
-                v.push_back(pos->second.symbol());
+                data.insert(std::pair<Variable, Term>(*i, substitution(*i)));
+                qs.push_back(*i);
             }
         }
 
         if (type() == UNIVERSAL) {
-            return UniversalFormula(formulas()[0][s][sub], v);
+            return UniversalFormula(formulas()[0][data], std::move(qs));
         }
 
-        return ExistentialFormula(formulas()[0][s][sub], v);
+        return ExistentialFormula(formulas()[0][data], std::move(qs));
     }
 
         break;
@@ -1624,128 +1363,127 @@ const FormulaEnvironment::Formula& FormulaEnvironment::Formula::dummy()
     return result;
 }
 
-FormulaEnvironment::Formula::Formula(const std::set<FormulaPrivate>::const_iterator &position) :
-    position(position)
+FormulaEnvironment::EmptyFormula::EmptyFormula()
 {
 }
 
 FormulaEnvironment::RelationFormula::RelationFormula(const RelationSymbol &symbol, const std::vector<Term> &terms) :
-    Formula(Formula::insert(RelationFormulaPrivate(symbol, terms)))
+    Formula(new RelationFormulaPrivate(symbol, terms))
 {
 }
 
 FormulaEnvironment::RelationFormula::RelationFormula(const RelationSymbol &symbol, std::vector<Term> &&terms) :
-    Formula(Formula::insert(RelationFormulaPrivate(symbol, terms)))
+    Formula(new RelationFormulaPrivate(symbol, terms))
 {
 }
 
 FormulaEnvironment::EqualityFormula::EqualityFormula(const std::vector<Term> &terms) :
-    Formula(Formula::insert(EqualityFormulaPrivate(terms)))
+    Formula(new EqualityFormulaPrivate(terms))
 {
 }
 
 FormulaEnvironment::EqualityFormula::EqualityFormula(std::vector<Term> &&terms) :
-    Formula(Formula::insert(EqualityFormulaPrivate(terms)))
+    Formula(new EqualityFormulaPrivate(terms))
 {
 }
 
 FormulaEnvironment::EqualityFormula::EqualityFormula(const Term &term1, const Term &term2) :
-    Formula(Formula::insert(EqualityFormulaPrivate(term1, term2)))
+    Formula(new EqualityFormulaPrivate(term1, term2))
 {
 }
 
 FormulaEnvironment::NegationFormula::NegationFormula(const Formula &formula) :
-    Formula(Formula::insert(NegationFormulaPrivate(formula)))
+    Formula(new NegationFormulaPrivate(formula))
 {
 }
 
 FormulaEnvironment::ConjunctionFormula::ConjunctionFormula(const std::vector<Formula> &formulas) :
-    Formula(Formula::insert(ConjunctionFormulaPrivate(formulas)))
+    Formula(new ConjunctionFormulaPrivate(formulas))
 {
 }
 
 FormulaEnvironment::ConjunctionFormula::ConjunctionFormula(std::vector<Formula> &&formulas) :
-    Formula(Formula::insert(ConjunctionFormulaPrivate(formulas)))
+    Formula(new ConjunctionFormulaPrivate(formulas))
 {
 }
 
 FormulaEnvironment::ConjunctionFormula::ConjunctionFormula(const Formula &formula1, const Formula &formula2) :
-    Formula(Formula::insert(ConjunctionFormulaPrivate(formula1, formula2)))
+    Formula(new ConjunctionFormulaPrivate(formula1, formula2))
 {
 }
 
 FormulaEnvironment::DisjunctionFormula::DisjunctionFormula(const std::vector<Formula> &formulas) :
-    Formula(Formula::insert(DisjunctionFormulaPrivate(formulas)))
+    Formula(new DisjunctionFormulaPrivate(formulas))
 {
 }
 
 FormulaEnvironment::DisjunctionFormula::DisjunctionFormula(std::vector<Formula> &&formulas) :
-    Formula(Formula::insert(DisjunctionFormulaPrivate(formulas)))
+    Formula(new DisjunctionFormulaPrivate(formulas))
 {
 }
 
 FormulaEnvironment::DisjunctionFormula::DisjunctionFormula(const Formula &formula1, const Formula &formula2) :
-    Formula(Formula::insert(DisjunctionFormulaPrivate(formula1, formula2)))
+    Formula(new DisjunctionFormulaPrivate(formula1, formula2))
 {
 }
 
 FormulaEnvironment::ImplicationFormula::ImplicationFormula(const std::vector<Formula> &formulas) :
-    Formula(Formula::insert(ImplicationFormulaPrivate(formulas)))
+    Formula(new ImplicationFormulaPrivate(formulas))
 {
 }
 
 FormulaEnvironment::ImplicationFormula::ImplicationFormula(std::vector<Formula> &&formulas) :
-    Formula(Formula::insert(ImplicationFormulaPrivate(formulas)))
+    Formula(new ImplicationFormulaPrivate(formulas))
 {
 }
 
 FormulaEnvironment::ImplicationFormula::ImplicationFormula(const Formula &formula1, const Formula &formula2) :
-    Formula(Formula::insert(ImplicationFormulaPrivate(formula1, formula2)))
+    Formula(new ImplicationFormulaPrivate(formula1, formula2))
 {
 }
 
 FormulaEnvironment::EquivalenceFormula::EquivalenceFormula(const std::vector<Formula> &formulas) :
-    Formula(Formula::insert(EquivalenceFormulaPrivate(formulas)))
+    Formula(new EquivalenceFormulaPrivate(formulas))
 {
 }
 
 FormulaEnvironment::EquivalenceFormula::EquivalenceFormula(std::vector<Formula> &&formulas) :
-    Formula(Formula::insert(EquivalenceFormulaPrivate(formulas)))
+    Formula(new EquivalenceFormulaPrivate(formulas))
 {
 }
 
 FormulaEnvironment::EquivalenceFormula::EquivalenceFormula(const Formula &formula1, const Formula &formula2) :
-    Formula(Formula::insert(EquivalenceFormulaPrivate(formula1, formula2)))
+    Formula(new EquivalenceFormulaPrivate(formula1, formula2))
 {
 }
 
 FormulaEnvironment::UniversalFormula::UniversalFormula(const Formula &formula, const Variable &variable) :
-    Formula(Formula::insert(UniversalFormulaPrivate(formula, variable)))
+    Formula(new UniversalFormulaPrivate(formula, variable))
 {
 }
 
 FormulaEnvironment::UniversalFormula::UniversalFormula(const Formula &formula, const std::vector<Variable> &variables) :
-    Formula(Formula::insert(UniversalFormulaPrivate(formula, variables)))
+    Formula(new UniversalFormulaPrivate(formula, variables))
 {
 }
 
 FormulaEnvironment::UniversalFormula::UniversalFormula(const Formula &formula, std::vector<Variable> &&variables) :
-    Formula(Formula::insert(UniversalFormulaPrivate(formula, variables)))
+    Formula(new UniversalFormulaPrivate(formula, variables))
 {
 }
 
 FormulaEnvironment::ExistentialFormula::ExistentialFormula(const Formula &formula, const Variable &variable) :
-    Formula(Formula::insert(ExistentialFormulaPrivate(formula, variable)))
+    Formula(new ExistentialFormulaPrivate(formula, variable))
 {
 }
 
 FormulaEnvironment::ExistentialFormula::ExistentialFormula(const Formula &formula, const std::vector<Variable> &variables) :
-    Formula(Formula::insert(ExistentialFormulaPrivate(formula, variables)))
+    Formula(new ExistentialFormulaPrivate(formula, variables))
 {
 }
 
 FormulaEnvironment::ExistentialFormula::ExistentialFormula(const Formula &formula, std::vector<Variable> &&variables) :
-    Formula(Formula::insert(ExistentialFormulaPrivate(formula, variables)))
+    Formula(new ExistentialFormulaPrivate(formula, variables))
 {
 }
 

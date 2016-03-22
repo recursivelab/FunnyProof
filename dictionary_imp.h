@@ -28,31 +28,30 @@ Dictionary::Environment::Environment()
 }
 
 Dictionary::Environment::Environment(const Environment &other) :
-    names(other.names)
+    symbols(other.symbols)
 {
 }
 
 Dictionary::Environment::Environment(Environment &&other) :
-    names(other.names)
+    symbols(other.symbols)
 {
 }
 
 Dictionary::Environment::Environment(const std::map<std::wstring, Symbol> &names) :
-    names(names)
+    symbols(names)
 {
 }
 
 Dictionary::Environment::Environment(std::map<std::wstring, Symbol> &&names) :
-    names(names)
+    symbols(names)
 {
 }
 
 DECLARE bool Dictionary::Environment::insert(const std::wstring &name, const Symbol &symbol)
 {
-    std::map<std::wstring, Symbol>::iterator i = names.find(name);
-
-    if (i == names.end()) {
-        names.emplace(std::make_pair(name, symbol));
+    if (symbols.find(name) == symbols.end()) {
+        symbols.emplace(std::make_pair(name, symbol));
+        names.emplace(std::make_pair(symbol, name));
 
         return true;
     }
@@ -62,10 +61,9 @@ DECLARE bool Dictionary::Environment::insert(const std::wstring &name, const Sym
 
 DECLARE bool Dictionary::Environment::insert(std::wstring &&name, const Symbol &symbol)
 {
-    std::map<std::wstring, Symbol>::iterator i = names.find(name);
-
-    if (i == names.end()) {
-        names.emplace(std::make_pair(name, symbol));
+    if (symbols.find(name) == symbols.end()) {
+        symbols.emplace(std::make_pair(static_cast<std::wstring&>(name), symbol));
+        names.emplace(std::make_pair(symbol, name));
 
         return true;
     }
@@ -75,13 +73,35 @@ DECLARE bool Dictionary::Environment::insert(std::wstring &&name, const Symbol &
 
 const Symbol& Dictionary::Environment::operator ()(const std::wstring &name) const
 {
-    std::map<std::wstring, Symbol>::const_iterator i = names.find(name);
+    std::map<std::wstring, Symbol>::const_iterator i = symbols.find(name);
 
-    if (i == names.cend()) {
+    if (i == symbols.cend()) {
         return Symbol::dummy();
     }
 
     return i->second;
+}
+
+std::wstring Dictionary::Environment::operator ()(const Symbol &symbol) const
+{
+    std::wstring empty;
+    std::map<Symbol, std::wstring>::const_iterator i = names.find(symbol);
+
+    if (i == names.cend()) {
+        return empty;
+    }
+
+    return i->second;
+}
+
+const std::map<std::wstring, Symbol>& Dictionary::Environment::getSymbols() const
+{
+    return symbols;
+}
+
+const std::map<Symbol, std::wstring>& Dictionary::Environment::getNames() const
+{
+    return names;
 }
 
 Dictionary::Dictionary()
@@ -122,6 +142,24 @@ Symbol Dictionary::operator ()(const std::wstring &name) const
     return Symbol::dummy();
 }
 
+std::wstring Dictionary::operator ()(const Symbol &symbol) const
+{
+    std::wstring empty;
+    size_t i = environents.size();
+
+    do {
+        --i;
+
+        const std::wstring &result = environents[i](symbol);
+
+        if (result.empty() == false) {
+            return result;
+        }
+    } while (i != 0);
+
+    return empty;
+}
+
 bool Dictionary::insert(const std::wstring &name, const Symbol &symbol)
 {
     size_t i = environents.size();
@@ -138,6 +176,44 @@ bool Dictionary::insert(std::wstring &&name, const Symbol &symbol)
     --i;
 
     return environents[i].insert(name, symbol);
+}
+
+std::wstring Dictionary::operator ()(const Term &term) const
+{
+    std::wstring empty;
+
+    switch (term.type()) {
+    case NONE_SYMBOL:
+        return empty;
+
+        break;
+    case VARIABLE: case CONSTANT:
+        return operator ()(term.symbol());
+
+        break;
+    case OPERATION:
+    {
+        std::wstring result = operator ()(term.symbol());
+
+        result += L"(";
+
+        for (size_t i = 0; i < term.arity(); ++i) {
+            if (i > 0) {
+                result += L",";
+            }
+
+            result += operator ()(term.getArgs()[i]);
+        }
+
+        result += L")";
+
+        return result;
+    }
+    default:
+        throw(1);
+
+        break;
+    }
 }
 
 #endif // DICTIONARY_IMP_H
