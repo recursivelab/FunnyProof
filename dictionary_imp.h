@@ -84,11 +84,10 @@ const Symbol& Dictionary::Environment::operator ()(const std::wstring &name) con
 
 std::wstring Dictionary::Environment::operator ()(const Symbol &symbol) const
 {
-    std::wstring empty;
     std::map<Symbol, std::wstring>::const_iterator i = names.find(symbol);
 
     if (i == names.cend()) {
-        return empty;
+        return std::wstring();
     }
 
     return i->second;
@@ -144,7 +143,6 @@ Symbol Dictionary::operator ()(const std::wstring &name) const
 
 std::wstring Dictionary::operator ()(const Symbol &symbol) const
 {
-    std::wstring empty;
     size_t i = environents.size();
 
     do {
@@ -157,7 +155,7 @@ std::wstring Dictionary::operator ()(const Symbol &symbol) const
         }
     } while (i != 0);
 
-    return empty;
+    return std::wstring();
 }
 
 bool Dictionary::insert(const std::wstring &name, const Symbol &symbol)
@@ -180,17 +178,17 @@ bool Dictionary::insert(std::wstring &&name, const Symbol &symbol)
 
 std::wstring Dictionary::operator ()(const Term &term) const
 {
-    std::wstring empty;
-
     switch (term.type()) {
     case NONE_SYMBOL:
-        return empty;
+        return std::wstring();
 
         break;
+
     case VARIABLE: case CONSTANT:
         return operator ()(term.symbol());
 
         break;
+
     case OPERATION:
     {
         std::wstring result = operator ()(term.symbol());
@@ -202,18 +200,218 @@ std::wstring Dictionary::operator ()(const Term &term) const
                 result += L",";
             }
 
-            result += operator ()(term.getArgs()[i]);
+            result += operator ()(term.args()[i]);
         }
 
         result += L")";
 
         return result;
     }
+
     default:
         throw(1);
 
         break;
     }
+}
+
+std::wstring Dictionary::operator ()(const Formula &formula) const
+{
+    std::wstring result;
+
+    switch (formula.type()) {
+    case NONE_SYMBOL:
+        result = L"↑";
+
+        break;
+
+    case FALSE_SYMBOL:
+        result = L"⊥";
+
+        break;
+
+    case TRUE_SYMBOL:
+        result = L"⊤";
+
+        break;
+
+    case EQUALITY:
+    {
+        const std::vector<Term> &terms = formula.terms();
+
+        if (terms.size() < 2) {
+            return L"⊤";
+        }
+
+        result = operator ()(terms[0]);
+
+        for (size_t i = 1; i < terms.size(); ++i) {
+            result += L"=";
+            result += operator ()(terms[1]);
+        }
+
+        return result;
+    }
+        break;
+
+    case RELATION:
+    {
+        const std::vector<Term> &terms = formula.terms();
+
+        if (terms.size() < 2) {
+            throw(1);
+        }
+
+        result += operator ()(formula.symbol());
+        result += L"(";
+        result += operator ()(terms[0]);
+
+        for (size_t i = 1; i < terms.size(); ++i) {
+            result += L",";
+            result += operator ()(terms[1]);
+        }
+
+        result += L")";
+
+        return result;
+    }
+
+        break;
+
+    case NEGATION:
+        if (formula.formulas().size() != 1) {
+            throw(1);
+        }
+
+        result += L"¬";
+
+        switch (formula.formulas()[0].type()) {
+        case EQUALITY: case RELATION: case NEGATION: case UNIVERSAL: case EXISTENTIAL:
+            result += operator ()(formula.formulas()[0]);
+
+            return result;
+
+            break;
+
+        case CONJUNCTION: case DISJUNCTION: case IMPLICATION: case EQUIVALENCE:
+            if (formula.formulas()[0].formulas().size() > 1) {
+                result += L"(";
+                result += operator ()(formula.formulas()[0]);
+                result += L")";
+            } else {
+                result += operator ()(formula.formulas()[0]);
+            }
+
+            return result;
+
+            break;
+
+        default:
+            throw(1);
+
+            break;
+        }
+
+        break;
+
+    case CONJUNCTION: case DISJUNCTION: case IMPLICATION: case EQUIVALENCE:
+        if (formula.formulas().size() > 1) {
+            result += L"(";
+            result += operator ()(formula.formulas()[0]);
+
+            for (size_t i = 1; i < formula.formulas().size(); ++i) {
+                switch (formula.type()) {
+                case CONJUNCTION:
+                    result += L"∧";
+
+                    break;
+
+                case DISJUNCTION:
+                    result += L"∨";
+
+                    break;
+
+                case IMPLICATION:
+                    result += L"⇒";
+
+                    break;
+
+                case EQUIVALENCE:
+                    result += L"⇔";
+
+                    break;
+
+                default:
+                    throw(1);
+
+                    break;
+                }
+
+                result += operator ()(formula.formulas()[i]);
+            }
+
+            result += L")";
+        } else if (formula.formulas().size() == 1) {
+            switch (formula.type()) {
+            case CONJUNCTION: case DISJUNCTION:
+                result += operator ()(formula.formulas()[0]);
+
+                break;
+
+            case IMPLICATION: case EQUIVALENCE:
+                result = L"⊤";
+
+                break;
+
+            default:
+                throw(1);
+
+                break;
+            }
+        } else {
+            switch (formula.type()) {
+            case CONJUNCTION: case IMPLICATION: case EQUIVALENCE:
+                result = L"⊤";
+
+                break;
+
+            case DISJUNCTION:
+                result = L"⊥";
+
+                break;
+
+            default:
+                throw(1);
+
+                break;
+            }
+        }
+
+        break;
+
+    case UNIVERSAL: case EXISTENTIAL:
+        if (formula.formulas().size() != 1) {
+            throw(1);
+        }
+
+        if (formula.variables().empty()) {
+            return operator ()(formula.formulas()[0]);
+        }
+
+        result += L"(";
+        result += formula.type() == UNIVERSAL ? L"∀" : L"∃";
+
+        result += L")";
+
+        break;
+
+    default:
+        throw(1);
+
+        break;
+    }
+
+    return std::wstring();
 }
 
 #endif // DICTIONARY_IMP_H

@@ -74,6 +74,40 @@ int Symbol::compare(const Symbol &other) const
     return id > other.id;
 }
 
+FalseSymbol::FalseSymbol() :
+    Symbol(FALSE_SYMBOL)
+{
+}
+
+const FalseSymbol& FalseSymbol::instance()
+{
+    static FalseSymbol result;
+
+    return result;
+}
+
+const FalseSymbol& falseSymbol()
+{
+    return FalseSymbol::instance();
+}
+
+TrueSymbol::TrueSymbol() :
+    Symbol(TRUE_SYMBOL)
+{
+}
+
+const TrueSymbol& TrueSymbol::instance()
+{
+    static TrueSymbol result;
+
+    return result;
+}
+
+const TrueSymbol& trueSymbol()
+{
+    return TrueSymbol::instance();
+}
+
 NegationSymbol::NegationSymbol() :
     Symbol(NEGATION)
 {
@@ -337,6 +371,10 @@ const TermEnvironment::TermPrivate& TermEnvironment::TermPrivate::dummy()
 
 bool TermEnvironment::TermPrivate::operator ==(const TermPrivate &other) const
 {
+    if (this == &other) {
+        return true;
+    }
+
     if (symbol != other.symbol) {
         return false;
     }
@@ -365,6 +403,10 @@ bool TermEnvironment::TermPrivate::operator !=(const TermPrivate &other) const
 
 int TermEnvironment::TermPrivate::compare(const TermPrivate &other) const
 {
+    if (this == &other) {
+        return 0;
+    }
+
     int result = symbol.compare(other.symbol);
 
     if (result != 0) {
@@ -409,7 +451,7 @@ size_t TermEnvironment::TermPrivate::hash() const
 bool TermEnvironment::TermPrivate::isFreeVariable(const Variable &variable) const
 {
     switch (symbol.id) {
-    case NONE_SYMBOL:
+    case NONE_SYMBOL: case FALSE_SYMBOL: case TRUE_SYMBOL:
         return false;
 
         break;
@@ -446,7 +488,7 @@ const std::set<Variable>& TermEnvironment::TermPrivate::getFreeVariables() const
 {
     if (freeVariablesComputed == false) {
         switch (symbol.type) {
-        case NONE_SYMBOL: case CONSTANT:
+        case NONE_SYMBOL: case FALSE_SYMBOL: case TRUE_SYMBOL: case CONSTANT:
             break;
 
         case VARIABLE:
@@ -600,7 +642,7 @@ size_t TermEnvironment::Term::arity() const
     return term.symbol.arity;
 }
 
-const std::vector<TermEnvironment::Term>& TermEnvironment::Term::getArgs() const
+const std::vector<TermEnvironment::Term>& TermEnvironment::Term::args() const
 {
     return term.args;
 }
@@ -627,13 +669,13 @@ TermEnvironment::Term TermEnvironment::Term::operator [](const Substitution &val
     }
 
     switch (term.symbol.type) {
-    case VARIABLE:
-        return valuation(term.symbol);
+    case NONE_SYMBOL: case FALSE_SYMBOL: case TRUE_SYMBOL: case CONSTANT:
+        return *this;
 
         break;
 
-    case CONSTANT:
-        return *this;
+    case VARIABLE:
+        return valuation(term.symbol);
 
         break;
 
@@ -693,6 +735,11 @@ std::vector<TermEnvironment::Term> TermEnvironment::twoTerms(const TermEnvironme
 
 FormulaEnvironment::FormulaPrivate::FormulaPrivate() :
     symbol(Symbol::dummy())
+{
+}
+
+FormulaEnvironment::FormulaPrivate::FormulaPrivate(const Symbol &symbol) :
+    symbol(symbol)
 {
 }
 
@@ -975,10 +1022,6 @@ const FormulaEnvironment::FormulaPrivate& FormulaEnvironment::FormulaPrivate::du
     return result;
 }
 
-FormulaEnvironment::EmptyFormulaPrivate::EmptyFormulaPrivate()
-{
-}
-
 std::vector<FormulaEnvironment::Formula> FormulaEnvironment::oneFormula(const Formula &formula)
 {
     std::vector<Formula> result;
@@ -996,6 +1039,20 @@ std::vector<FormulaEnvironment::Formula> FormulaEnvironment::twoFormulas(const F
     result.push_back(formula2);
 
     return result;
+}
+
+FormulaEnvironment::EmptyFormulaPrivate::EmptyFormulaPrivate()
+{
+}
+
+FormulaEnvironment::FalseFormulaPrivate::FalseFormulaPrivate() :
+    FormulaPrivate(falseSymbol())
+{
+}
+
+FormulaEnvironment::TrueFormulaPrivate::TrueFormulaPrivate() :
+    FormulaPrivate(trueSymbol())
+{
 }
 
 FormulaEnvironment::EqualityFormulaPrivate::EqualityFormulaPrivate(const std::vector<Term> &terms) :
@@ -1137,7 +1194,7 @@ FormulaEnvironment::Formula::Formula() :
 
 FormulaEnvironment::Formula::Formula(const Formula &other) :
     formulaPtr(other.formulaPtr),
-    formula(formula)
+    formula(other.formula)
 {
 }
 
@@ -1350,6 +1407,8 @@ FormulaEnvironment::Formula FormulaEnvironment::Formula::operator [](const TermE
         break;
 
     default:
+        throw(1);
+
         break;
     }
 
@@ -1364,6 +1423,16 @@ const FormulaEnvironment::Formula& FormulaEnvironment::Formula::dummy()
 }
 
 FormulaEnvironment::EmptyFormula::EmptyFormula()
+{
+}
+
+FormulaEnvironment::FalseFormula::FalseFormula() :
+    Formula(new FalseFormulaPrivate)
+{
+}
+
+FormulaEnvironment::TrueFormula::TrueFormula() :
+    Formula(new TrueFormulaPrivate)
 {
 }
 

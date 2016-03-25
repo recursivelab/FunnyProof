@@ -50,6 +50,8 @@
 enum SymbolType
 {
     NONE_SYMBOL,
+    FALSE_SYMBOL,
+    TRUE_SYMBOL,
     VARIABLE,
     CONSTANT,
     OPERATION,
@@ -85,6 +87,26 @@ public:
     DECLARE bool operator <(const Symbol &other) const;
     DECLARE int compare(const Symbol &other) const;
 };
+
+class FalseSymbol : public Symbol
+{
+    DECLARE FalseSymbol();
+
+public:
+    DECLARE static const FalseSymbol& instance();
+};
+
+DECLARE const FalseSymbol& falseSymbol();
+
+class TrueSymbol : public Symbol
+{
+    DECLARE TrueSymbol();
+
+public:
+    DECLARE static const TrueSymbol& instance();
+};
+
+DECLARE const TrueSymbol& trueSymbol();
 
 class NegationSymbol : public Symbol
 {
@@ -284,7 +306,7 @@ public:
         DECLARE uint64_t id() const;
         DECLARE const Symbol& symbol() const;
         DECLARE size_t arity() const;
-        DECLARE const std::vector<Term>& getArgs() const;
+        DECLARE const std::vector<Term>& args() const;
         DECLARE bool isFreeVariable(const Variable &variable) const;
         DECLARE const std::set<Variable>& getFreeVariables() const;
         DECLARE bool isEmpty() const;
@@ -317,6 +339,7 @@ private:
         mutable bool freeVariablesComputed;
 
         DECLARE FormulaPrivate();
+        DECLARE FormulaPrivate(const Symbol &symbol);
         DECLARE FormulaPrivate(const Symbol &symbol, const std::vector<Term> &terms);
         DECLARE FormulaPrivate(const Symbol &symbol, std::vector<Term> &&terms);
         DECLARE FormulaPrivate(const Symbol &symbol, const std::vector<Formula> &formulas);
@@ -345,6 +368,18 @@ private:
     {
     public:
         DECLARE EmptyFormulaPrivate();
+    };
+
+    class FalseFormulaPrivate : public FormulaPrivate
+    {
+    public:
+        DECLARE FalseFormulaPrivate();
+    };
+
+    class TrueFormulaPrivate : public FormulaPrivate
+    {
+    public:
+        DECLARE TrueFormulaPrivate();
     };
 
     class EqualityFormulaPrivate : public FormulaPrivate
@@ -418,6 +453,8 @@ private:
 
 public:
 
+    struct FalseFormula;
+    struct TrueFormula;
     struct RelationFormula;
     struct EqualityFormula;
     struct NegationFormula;
@@ -455,6 +492,8 @@ public:
         DECLARE Formula operator [](const TermEnvironment::Substitution &substitution) const;
         DECLARE static const Formula& dummy();
 
+        friend struct FalseFormula;
+        friend struct TrueFormula;
         friend struct RelationFormula;
         friend struct EqualityFormula;
         friend struct NegationFormula;
@@ -469,6 +508,16 @@ public:
     struct EmptyFormula : public Formula
     {
         DECLARE EmptyFormula();
+    };
+
+    struct FalseFormula : public Formula
+    {
+        DECLARE FalseFormula();
+    };
+
+    struct TrueFormula : public Formula
+    {
+        DECLARE TrueFormula();
     };
 
     struct RelationFormula : public Formula

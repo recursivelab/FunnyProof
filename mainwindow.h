@@ -17,15 +17,25 @@
 *                                                                              *
 *******************************************************************************/
 
-#include "mainwindow.h"
-#include <QApplication>
+#ifndef MAINWINDOW_H
+#define MAINWINDOW_H
 
-int main(int argc, char *argv[])
-{
-    QApplication application(argc, argv);
-    MainWindow mainWindow;
+#include <QMainWindow>
 
-    mainWindow.show();
-
-    return application.exec();
+namespace Ui {
+class MainWindow;
 }
+
+class MainWindow : public QMainWindow
+{
+    Q_OBJECT
+
+public:
+    explicit MainWindow(QWidget *parent = 0);
+    ~MainWindow();
+
+private:
+    Ui::MainWindow *ui;
+};
+
+#endif // MAINWINDOW_H

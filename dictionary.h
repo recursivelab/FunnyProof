@@ -61,4 +61,11 @@ public:
     DECLARE std::wstring operator ()(const Formula &formula) const;
 };
 
+
+#ifdef INLINE
+
+#include "dictionary_imp.h"
+
+#endif
+
 #endif // DICTIONARY_H
