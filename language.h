@@ -231,8 +231,7 @@ private:
     public:
         const Symbol symbol;
         const std::vector<Term> args;
-        mutable std::set<Variable> freeVariables;
-        mutable bool freeVariablesComputed;
+        mutable std::shared_ptr<std::set<Variable>> freeVariables;
 
     protected:
         DECLARE TermPrivate(Symbol symbol);
@@ -335,8 +334,7 @@ private:
         const std::vector<Term> terms;
         const std::vector<Formula> formulas;
         const std::vector<Variable> variables;
-        mutable std::set<Variable> freeVariables;
-        mutable bool freeVariablesComputed;
+        mutable std::shared_ptr<std::set<Variable>> freeVariables;
 
         DECLARE FormulaPrivate();
         DECLARE FormulaPrivate(const Symbol &symbol);

@@ -319,16 +319,14 @@ Variable::Variable(const Symbol &other) :
 TermEnvironment::TermPrivate::TermPrivate(Symbol symbol) :
     symbol(symbol),
     args(),
-    freeVariables(),
-    freeVariablesComputed(symbol.type == CONSTANT)
+    freeVariables()
 {
 }
 
 TermEnvironment::TermPrivate::TermPrivate(Symbol symbol, const std::vector<Term> &args) :
     symbol(symbol),
     args(args),
-    freeVariables(),
-    freeVariablesComputed(symbol.type == CONSTANT)
+    freeVariables()
 {
     if (args.size() != symbol.arity) {
         throw(0);
@@ -338,8 +336,7 @@ TermEnvironment::TermPrivate::TermPrivate(Symbol symbol, const std::vector<Term>
 TermEnvironment::TermPrivate::TermPrivate(Symbol symbol, std::vector<Term> &&args) :
     symbol(symbol),
     args(std::move(args)),
-    freeVariables(),
-    freeVariablesComputed(symbol.type == CONSTANT)
+    freeVariables()
 {
     if (args.size() != symbol.arity) {
         throw(0);
@@ -349,16 +346,14 @@ TermEnvironment::TermPrivate::TermPrivate(Symbol symbol, std::vector<Term> &&arg
 TermEnvironment::TermPrivate::TermPrivate(const TermPrivate &other) :
     symbol(other.symbol),
     args(other.args),
-    freeVariables(other.freeVariables),
-    freeVariablesComputed(other.freeVariablesComputed)
+    freeVariables(other.freeVariables)
 {
 }
 
 TermEnvironment::TermPrivate::TermPrivate(TermPrivate &&other) :
     symbol(other.symbol),
     args(std::move(other.args)),
-    freeVariables(std::move(other.freeVariables)),
-    freeVariablesComputed(other.freeVariablesComputed)
+    freeVariables(std::move(other.freeVariables))
 {
 }
 
@@ -486,13 +481,15 @@ bool TermEnvironment::TermPrivate::isFreeVariable(const Variable &variable) cons
 
 const std::set<Variable>& TermEnvironment::TermPrivate::getFreeVariables() const
 {
-    if (freeVariablesComputed == false) {
+    if (freeVariables == false) {
+        std::shared_ptr<std::set<Variable>> freeVariables(new std::set<Variable>);
+
         switch (symbol.type) {
         case NONE_SYMBOL: case FALSE_SYMBOL: case TRUE_SYMBOL: case CONSTANT:
             break;
 
         case VARIABLE:
-            freeVariables.insert(symbol);
+            freeVariables->insert(symbol);
 
             break;
 
@@ -500,7 +497,7 @@ const std::set<Variable>& TermEnvironment::TermPrivate::getFreeVariables() const
             for (size_t i = 0; i < args.size(); ++i) {
                 const std::set<Variable> variables = args[i].getFreeVariables();
 
-                freeVariables.insert(variables.cbegin(), variables.cend());
+                freeVariables->insert(variables.cbegin(), variables.cend());
             }
 
             break;
@@ -510,10 +507,10 @@ const std::set<Variable>& TermEnvironment::TermPrivate::getFreeVariables() const
             break;
         }
 
-        freeVariablesComputed = true;
+        this->freeVariables = freeVariables;
     }
 
-    return freeVariables;
+    return *freeVariables;
 }
 
 TermEnvironment::EmptyTermPrivate::EmptyTermPrivate() :
@@ -746,32 +743,28 @@ FormulaEnvironment::FormulaPrivate::FormulaPrivate(const Symbol &symbol) :
 FormulaEnvironment::FormulaPrivate::FormulaPrivate(const Symbol &symbol, const std::vector<Term> &terms) :
     symbol(symbol),
     terms(terms),
-    freeVariables(),
-    freeVariablesComputed(false)
+    freeVariables()
 {
 }
 
 FormulaEnvironment::FormulaPrivate::FormulaPrivate(const Symbol &symbol, std::vector<Term> &&terms) :
     symbol(symbol),
     terms(terms),
-    freeVariables(),
-    freeVariablesComputed(false)
+    freeVariables()
 {
 }
 
 FormulaEnvironment::FormulaPrivate::FormulaPrivate(const Symbol &symbol, const std::vector<Formula> &formulas) :
     symbol(symbol),
     formulas(formulas),
-    freeVariables(),
-    freeVariablesComputed(false)
+    freeVariables()
 {
 }
 
 FormulaEnvironment::FormulaPrivate::FormulaPrivate(const Symbol &symbol, std::vector<Formula> &&formulas) :
     symbol(symbol),
     formulas(formulas),
-    freeVariables(),
-    freeVariablesComputed(false)
+    freeVariables()
 {
 }
 
@@ -779,8 +772,7 @@ FormulaEnvironment::FormulaPrivate::FormulaPrivate(const Symbol &symbol, const F
     symbol(symbol),
     formulas(oneFormula(formula)),
     variables(variables),
-    freeVariables(),
-    freeVariablesComputed(false)
+    freeVariables()
 {
 }
 
@@ -788,8 +780,7 @@ FormulaEnvironment::FormulaPrivate::FormulaPrivate(const Symbol &symbol, const F
     symbol(symbol),
     formulas(oneFormula(formula)),
     variables(variables),
-    freeVariables(),
-    freeVariablesComputed(false)
+    freeVariables()
 {
 }
 
@@ -797,8 +788,7 @@ FormulaEnvironment::FormulaPrivate::FormulaPrivate(const Symbol &symbol, const s
     symbol(symbol),
     terms(terms),
     formulas(formulas),
-    freeVariables(),
-    freeVariablesComputed(false)
+    freeVariables()
 {
 }
 
@@ -806,8 +796,7 @@ FormulaEnvironment::FormulaPrivate::FormulaPrivate(const Symbol &symbol, std::ve
     symbol(symbol),
     terms(terms),
     formulas(formulas),
-    freeVariables(),
-    freeVariablesComputed(false)
+    freeVariables()
 {
 }
 
@@ -815,8 +804,7 @@ FormulaEnvironment::FormulaPrivate::FormulaPrivate(const Symbol &symbol, std::ve
     symbol(symbol),
     terms(terms),
     formulas(formulas),
-    freeVariables(),
-    freeVariablesComputed(false)
+    freeVariables()
 {
 }
 
@@ -824,8 +812,7 @@ FormulaEnvironment::FormulaPrivate::FormulaPrivate(const FormulaPrivate &other) 
     symbol(other.symbol),
     terms(other.terms),
     formulas(other.formulas),
-    freeVariables(),
-    freeVariablesComputed(false)
+    freeVariables()
 {
 }
 
@@ -833,8 +820,7 @@ FormulaEnvironment::FormulaPrivate::FormulaPrivate(FormulaPrivate &&other) :
     symbol(other.symbol),
     terms(std::move(other.terms)),
     formulas(std::move(other.formulas)),
-    freeVariables(std::move(other.freeVariables)),
-    freeVariablesComputed(other.freeVariablesComputed)
+    freeVariables(std::move(other.freeVariables))
 {
 }
 
@@ -961,7 +947,9 @@ bool FormulaEnvironment::FormulaPrivate::isFreeVariable(const Variable &variable
 
 const std::set<Variable>& FormulaEnvironment::FormulaPrivate::getFreeVariables() const
 {
-    if (freeVariablesComputed == false) {
+    if (freeVariables == false) {
+        std::shared_ptr<std::set<Variable>> freeVariables(new std::set<Variable>);
+
         switch (symbol.type) {
         case NONE_SYMBOL:
             break;
@@ -971,7 +959,7 @@ const std::set<Variable>& FormulaEnvironment::FormulaPrivate::getFreeVariables()
             for (size_t i = 0; i < terms.size(); ++i) {
                 const std::set<Variable> &variables = terms[i].getFreeVariables();
 
-                freeVariables.insert(variables.begin(), variables.end());
+                freeVariables->insert(variables.begin(), variables.end());
             }
 
             break;
@@ -984,7 +972,7 @@ const std::set<Variable>& FormulaEnvironment::FormulaPrivate::getFreeVariables()
             for (size_t i = 0; i < formulas.size(); ++i) {
                 const std::set<Variable> &variables = formulas[i].getFreeVariables();
 
-                freeVariables.insert(variables.begin(), variables.end());
+                freeVariables->insert(variables.begin(), variables.end());
             }
 
             break;
@@ -994,11 +982,11 @@ const std::set<Variable>& FormulaEnvironment::FormulaPrivate::getFreeVariables()
             for (size_t i = 0; i < formulas.size(); ++i) {
                 const std::set<Variable> &variables = formulas[i].getFreeVariables();
 
-                freeVariables.insert(variables.begin(), variables.end());
+                freeVariables->insert(variables.begin(), variables.end());
             }
 
             for (size_t i = 0; i < variables.size(); ++i) {
-                freeVariables.erase(variables[i]);
+                freeVariables->erase(variables[i]);
             }
 
             break;
@@ -1009,10 +997,10 @@ const std::set<Variable>& FormulaEnvironment::FormulaPrivate::getFreeVariables()
             break;
         }
 
-        freeVariablesComputed = true;
+        this->freeVariables = freeVariables;
     }
 
-    return freeVariables;
+    return *freeVariables;
 }
 
 const FormulaEnvironment::FormulaPrivate& FormulaEnvironment::FormulaPrivate::dummy()
