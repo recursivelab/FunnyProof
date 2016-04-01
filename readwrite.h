@@ -25,8 +25,6 @@
 class Writer
 {
 public:
-    Writer();
-    virtual ~Writer();
     std::wstring noneSymbol;
     std::wstring falseSymbol;
     std::wstring trueSymbol;
@@ -49,6 +47,9 @@ public:
     std::wstring operationSeparatorSymbol;
     std::wstring relationSeparatorSymbol;
     std::wstring variableSeparatorSymbol;
+
+    Writer();
+    virtual ~Writer();
     virtual std::wstring variableName(uint64_t id) const;
     virtual std::wstring constantName(uint64_t id) const;
     virtual std::wstring operationName(uint64_t id) const;
@@ -58,7 +59,19 @@ public:
     virtual bool bracketsNeeded(SymbolType type, SymbolType nestedType) const;
     virtual void insertBracketsIfNeeded(SymbolType type, SymbolType nestedType, std::wstring &str) const;
     virtual std::wstring operator ()(const Term &term, const Dictionary &dictionary, SymbolType *symbolType = nullptr) const;
-    virtual std::wstring operator ()(const Formula &formula, const Dictionary &dictionary, SymbolType *symbolType = nullptr, size_t *counter = nullptr) const;
+    virtual std::wstring operator ()(const Formula &formula, const Dictionary &dictionary, SymbolType *symbolType = nullptr) const;
+};
+
+class Reader
+{
+public:
+    Reader();
+    virtual ~Reader();
+    virtual bool getToken(const std::wstring &str, size_t &pos, std::wstring &token) const;
+//    virtual bool getConDis(const std::wstring &str, size_t &pos, bool &ok) const;
+    virtual std::vector<Term> getTermList(const std::wstring &str, Dictionary &dictionary, size_t &pos, bool &ok) const;
+    virtual Term getTerm(const std::wstring &str, Dictionary &dictionary, size_t &pos, bool &ok) const;
+    virtual Term getTerm(const std::wstring &str, Dictionary &dictionary, bool *ok = nullptr) const;
 };
 
 #endif // READWRITE_H

@@ -19,15 +19,16 @@
      <widget class="QPlainTextEdit" name="input">
       <property name="font">
        <font>
-        <family>Linux Libertine Display G</family>
+        <family>Lucida Sans Unicode</family>
+        <pointsize>16</pointsize>
        </font>
       </property>
      </widget>
     </item>
     <item>
-     <widget class="QCommandLinkButton" name="commandLinkButton">
+     <widget class="QPushButton" name="okButton">
       <property name="text">
-       <string>CommandLinkButton</string>
+       <string>OK</string>
       </property>
      </widget>
     </item>
@@ -59,5 +60,25 @@
   <widget class="QStatusBar" name="statusbar"/>
  </widget>
  <resources/>
- <connections/>
+ <connections>
+  <connection>
+   <sender>okButton</sender>
+   <signal>clicked()</signal>
+   <receiver>MainWindow</receiver>
+   <slot>okButtonPressed()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>313</x>
+     <y>297</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>314</x>
+     <y>286</y>
+    </hint>
+   </hints>
+  </connection>
+ </connections>
+ <slots>
+  <slot>okButtonPressed()</slot>
+ </slots>
 </ui>

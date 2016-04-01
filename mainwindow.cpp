@@ -26,30 +26,13 @@ MainWindow::MainWindow(QWidget *parent) :
     ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
-    Writer w;
-    Dictionary d;
-    Variable x;
-    d.insert(L"x", x);
-    ConstantSymbol c;
-    d.insert(L"c", c);
-    Term tx(x);
-    Term tc(c);
-    OperationSymbol f(2);
-    d.insert(L"Φ", f);
-    Term tf(f, TermEnvironment::twoTerms(tx, tc));
-    FormulaEnvironment::EqualityFormula fe(tx, tc);
-    RelationSymbol r(2);
-    d.insert(L"ρ", r);
-    FormulaEnvironment::RelationFormula fr(r, TermEnvironment::twoTerms(tc, tf));
-    FormulaEnvironment::ConjunctionFormula fc(fr, fe);
-    FormulaEnvironment::DisjunctionFormula fd(fe, fe);
-    FormulaEnvironment::ImplicationFormula fi(fc, fd);
-
-    ui->output->appendPlainText(QString::fromStdWString(w(tx, d)));
-    ui->output->appendPlainText(QString::fromStdWString(w(fi, d)));
 }
 
 MainWindow::~MainWindow()
 {
     delete ui;
+}
+
+void MainWindow::okButtonPressed()
+{
 }

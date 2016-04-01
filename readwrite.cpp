@@ -17,6 +17,7 @@
 *                                                                              *
 *******************************************************************************/
 
+#include <cwctype>
 #include "readwrite.h"
 
 
@@ -229,17 +230,13 @@ std::wstring Writer::operator ()(const Term &term, const Dictionary &dictionary,
     return result;
 }
 
-std::wstring Writer::operator ()(const Formula &formula, const Dictionary &dictionary, SymbolType *symbolType, size_t *counter) const
+std::wstring Writer::operator ()(const Formula &formula, const Dictionary &dictionary, SymbolType *symbolType) const
 {
-    size_t localCounter;
     SymbolType localSymbolType;
     SymbolType &type = symbolType ? *symbolType : localSymbolType;
-    size_t &cnt = counter ? *counter : localCounter;
+    std::wstring result;
 
     type = formula.type();
-    cnt = formula.terms().size() + formula.formulas().size();
-
-    std::wstring result;
 
     switch (type) {
     case NONE_SYMBOL:
@@ -294,64 +291,75 @@ std::wstring Writer::operator ()(const Formula &formula, const Dictionary &dicti
         break;
 
     case NEGATION:
-        result = operator ()(formula.formulas()[0], dictionary, &type, &cnt);
+        result = operator ()(formula.formulas()[0], dictionary, &type);
         insertBracketsIfNeeded(formula.type(), type, result);
         type = NEGATION;
-        cnt = 1;
         result = negationSymbol+result;
 
         break;
 
     case CONJUNCTION: case DISJUNCTION:
-        if (cnt == 0) {
-            result = type == CONJUNCTION ? trueSymbol : falseSymbol;
-        } else if (cnt == 1) {
+        switch (formula.formulas().size()) {
+        case 0:
+            if (type == CONJUNCTION) {
+                result = trueSymbol;
+                type = TRUE_SYMBOL;
+            } else {
+                result = falseSymbol;
+                type = FALSE_SYMBOL;
+            }
+
+            break;
+
+        case 1:
             result = operator ()(formula.formulas()[0], dictionary);
-        } else {
-            result = operator ()(formula.formulas()[0], dictionary, &type, &cnt);
+
+            break;
+        default:
+            result = operator ()(formula.formulas()[0], dictionary, &type);
             insertBracketsIfNeeded(formula.type(), type, result);
 
             for (size_t i = 1; i < formula.formulas().size(); ++i) {
                 result += formula.type() == CONJUNCTION ? conjunctionSymbol : disjunctionSymbol;
 
-                std::wstring tmp = operator ()(formula.formulas()[i], dictionary, &type, &cnt);
+                std::wstring tmp = operator ()(formula.formulas()[i], dictionary, &type);
 
                 insertBracketsIfNeeded(formula.type(), type, tmp);
                 result += tmp;
             }
 
-            type = formula.type();
-            cnt = formula.formulas().size();
+            break;
         }
+
+        type = formula.type();
 
         break;
 
     case IMPLICATION: case EQUIVALENCE:
-        if (cnt <= 1) {
+        if (formula.formulas().size() <= 1) {
             result = trueSymbol;
         } else {
-            result = operator ()(formula.formulas()[0], dictionary, &type, &cnt);
+            result = operator ()(formula.formulas()[0], dictionary, &type);
 
             insertBracketsIfNeeded(formula.type(), type, result);
 
             for (size_t i = 1; i < formula.formulas().size(); ++i) {
                 result += formula.type() == IMPLICATION ? implicationSymbol : equivalenceSymbol;
 
-                std::wstring tmp = operator ()(formula.formulas()[i], dictionary, &type, &cnt);
+                std::wstring tmp = operator ()(formula.formulas()[i], dictionary, &type);
 
                 insertBracketsIfNeeded(formula.type(), type, tmp);
                 result += tmp;
             }
 
             type = formula.type();
-            cnt = formula.formulas().size();
         }
 
         break;
 
     case UNIVERSAL: case EXISTENTIAL:
         if (formula.variables().empty()) {
-            result = operator ()(formula.formulas()[0], dictionary, &type, &cnt);
+            result = operator ()(formula.formulas()[0], dictionary, &type);
         } else {
             result = leftQuantifierBracket;
             result += type == UNIVERSAL ? universalQuantifier : existentialQuantifier;
@@ -377,6 +385,354 @@ std::wstring Writer::operator ()(const Formula &formula, const Dictionary &dicti
 
         break;
     }
+
+    return result;
+}
+
+Reader::Reader()
+{
+}
+
+Reader::~Reader()
+{
+}
+
+bool Reader::getToken(const std::wstring &str, size_t &pos, std::wstring &token) const
+{
+
+    token.clear();
+
+    while (pos < str.size() && iswspace(str[pos])) {
+        ++pos;
+    }
+
+    if (pos >= str.size()) {
+        return false;
+    }
+
+    wchar_t ch = str[pos];
+
+    switch (ch) {
+    case L'(':
+    case L')':
+    case L',':
+    case L'↑':
+    case L'¬':
+    case L'∧':
+    case L'∨':
+    case L'⇒':
+    case L'⇔':
+    case L'⊤':
+    case L'⊥':
+    case L'∀':
+    case L'∃':
+    case L'=':
+        token.push_back(ch);
+        ++pos;
+
+        return true;
+
+        break;
+    default:
+        break;
+    }
+
+    if (iswalpha(ch) == false) {
+        return false;
+    }
+
+    token += ch;
+    ++pos;
+
+    if (pos < str.size() && str[pos] == L'_') {
+        switch (str[pos-1]) {
+        case L'v':
+        case L'c':
+        case L'f':
+        case L'R':
+
+            break;
+
+        default:
+            return false;
+
+            break;
+        }
+
+        token += str[pos++];
+
+        if (pos >= str.size() || iswalnum(str[pos]) == false) {
+            return false;
+        }
+
+        token += str[pos++];
+
+        while (pos < str.size() && iswalnum(str[pos])) {
+            token += str[pos++];
+        }
+
+        return true;
+    }
+
+    while (pos < str.size() && isalnum(str[pos])) {
+        token += str[pos++];
+    }
+
+    return true;
+}
+
+std::vector<Term> Reader::getTermList(const std::wstring &str, Dictionary &dictionary, size_t &pos, bool &ok) const
+{
+    std::wstring token;
+    std::vector<Term> result;
+
+    if (getToken(str, pos, token) == false || token != L"(") {
+        ok = false;
+
+        return result;
+    }
+
+    size_t currentPos = pos;
+
+    ok = getToken(str, pos, token);
+
+    if (ok == false) {
+        return std::vector<Term>();
+    }
+
+    if (token == L")") {
+        return result;
+    }
+
+    pos = currentPos;
+
+    while (true) {
+        Term t = getTerm(str, dictionary, pos, ok);
+
+        if (ok == false) {
+            return std::vector<Term>();
+        }
+
+        result.push_back(t);
+        ok = getToken(str, pos, token);
+
+        if (ok == false) {
+            return std::vector<Term>();
+        }
+
+        if (token == L")") {
+            return result;
+        }
+
+        if (token != L",") {
+            ok = false;
+
+            return std::vector<Term>();
+        }
+    }
+}
+
+Term Reader::getTerm(const std::wstring &str, Dictionary &dictionary, size_t &pos, bool &ok) const
+{
+    std::vector<Term> terms;
+    std::wstring token;
+
+    if (getToken(str, pos, token) == false) {
+        ok = false;
+
+        return Term();
+    }
+
+    if (token.size() > 2 && token[1] == L'_') {
+        wchar_t c = token[0];
+        std::wstring name = token.substr(2);
+
+        Symbol s = dictionary(name);
+
+        if (s.type == NONE_SYMBOL) {
+            if (iswalpha(name[0]) == false) {
+                ok = false;
+
+                return Term();
+            }
+
+            switch (c) {
+            case 'v':
+            {
+                Variable v;
+
+                ok = dictionary.insert(name, v);
+
+                if (ok) {
+                    return Term(v);
+                }
+
+                return Term();
+            }
+
+                break;
+
+            case 'c':
+            {
+                ConstantSymbol c;
+
+                ok = dictionary.insert(name, c);
+
+                if (ok) {
+                    return Term(c);
+                }
+
+                return Term();
+            }
+
+                break;
+
+            case 'f':
+            {
+                terms = getTermList(str, dictionary, pos, ok);
+
+                if (ok == false) {
+                    return Term();
+                }
+
+
+                Symbol s = dictionary(name);
+
+                switch (s.type) {
+                case NONE_SYMBOL:
+                {
+                    OperationSymbol f(terms.size());
+
+                    dictionary.insert(name, f);
+
+                    return Term(f, std::move(terms));
+                }
+
+                    break;
+
+                case OPERATION:
+                    if (s.arity != terms.size()) {
+                        ok = false;
+
+                        return Term();
+                    }
+
+                    return Term(OperationSymbol(s), std::move(terms));
+
+                    break;
+
+                default:
+                    ok = false;
+
+                    return Term();
+
+                    break;
+                }
+            }
+
+                break;
+
+            default:
+                throw(1);
+
+                break;
+            }
+        } else {
+            switch (c) {
+            case L'v':
+                if (s.type != VARIABLE) {
+                    ok = false;
+
+                    return Term();
+                }
+
+                return TermEnvironment::Term(Variable(s));
+
+                break;
+
+            case L'c':
+                if (s.type != CONSTANT) {
+                    ok = false;
+
+                    return Term();
+                }
+
+                return TermEnvironment::Term(ConstantSymbol(s));
+
+                break;
+
+            case L'f':
+                if (s.type != OPERATION) {
+                    ok = false;
+
+                    return Term();
+                }
+
+                terms = getTermList(str, dictionary, pos, ok);
+
+                if (ok == false || terms.size() != s.arity) {
+                    ok = false;
+
+                    return Term();
+                }
+
+                return TermEnvironment::Term(OperationSymbol(s), std::move(terms));
+
+                break;
+
+            default:
+                throw (1);
+
+                break;
+            }
+        }
+    } else {
+        Symbol s = dictionary(token);
+
+        switch (s.type) {
+        case VARIABLE:
+            return Term(Variable(s));
+
+            break;
+
+        case CONSTANT:
+            return Term(ConstantSymbol(s));
+
+            break;
+
+        case OPERATION:
+            terms = getTermList(str, dictionary, pos, ok);
+
+            if (ok == false || terms.size() != s.arity) {
+                ok = false;
+
+                return Term();
+            }
+
+            return Term(OperationSymbol(s), std::move(terms));
+
+            break;
+
+        default:
+            break;
+        }
+    }
+
+    ok = false;
+
+    return Term();
+}
+
+Term Reader::getTerm(const std::wstring &str, Dictionary &dictionary, bool *ok) const
+{
+    static bool localBool;
+    size_t pos = 0;
+
+    if (ok == nullptr) {
+        ok = &localBool;
+    }
+
+    Term result = getTerm(str, dictionary, pos, *ok);
 
     return result;
 }
