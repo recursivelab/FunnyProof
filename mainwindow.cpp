@@ -33,6 +33,12 @@ MainWindow::~MainWindow()
     delete ui;
 }
 
+void MainWindow::print(const QString &s)
+{
+    ui->output->appendPlainText(s);
+}
+
+
 void MainWindow::okButtonPressed()
 {
 }

@@ -278,6 +278,7 @@ public:
     public:
         DECLARE Substitution(const std::map<Variable, Term> &valuation);
         DECLARE Substitution(std::map<Variable, Term> &&valuation);
+        DECLARE Substitution(const Variable &variable, const Term &term);
         DECLARE Term operator ()(const Variable &variable) const;
 
         const std::map<Variable, Term> data;
@@ -316,6 +317,7 @@ public:
     DECLARE static std::vector<Variable> oneVariable(const Variable &variable);
     DECLARE static std::vector<Term> oneTerm(const Term &term);
     DECLARE static std::vector<Term> twoTerms(const Term &term1, const Term &term2);
+    DECLARE static Substitution unificator(std::vector<std::pair<Term, Term>> &conditions, bool &ok);
 };
 
 typedef TermEnvironment::Term Term;

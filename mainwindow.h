@@ -36,6 +36,7 @@ public:
 
 private:
     Ui::MainWindow *ui;
+    void print(const QString &s);
 
 private slots:
     void okButtonPressed();

@@ -548,6 +548,17 @@ TermEnvironment::Substitution::Substitution(std::map<Variable, Term> &&valuation
 {
 }
 
+TermEnvironment::Substitution::Substitution(const Variable &variable, const Term &term) :
+    data(([](const Variable &variable, const Term &term) -> std::map<Variable, Term> {
+        std::map<Variable, Term> result;
+
+        result.insert(std::pair<Variable, Term>(variable, term));
+
+        return result;
+    })(variable, term))
+{
+}
+
 TermEnvironment::Term TermEnvironment::Substitution::operator ()(const Variable &variable) const
 {
     std::map<Variable, Term>::const_iterator i = data.find(variable);
@@ -726,6 +737,82 @@ std::vector<TermEnvironment::Term> TermEnvironment::twoTerms(const TermEnvironme
 
     result.push_back(term1);
     result.push_back(term2);
+
+    return result;
+}
+
+Substitution TermEnvironment::unificator(std::vector<std::pair<Term, Term>> &conditions, bool &ok)
+{
+    std::map<Variable, Term> result;
+
+    while (conditions.empty()==false) {
+        const std::pair<Term, Term> &p = conditions[conditions.size()-1];
+        const Term u = p.first;
+        const Term v = p.second;
+
+        if (u==v) {
+            conditions.pop_back();
+
+            continue;
+        }
+
+        if (u.type()==VARIABLE || v.type()==VARIABLE) {
+            const Variable *x;
+            const Term *t;
+
+            if (u.type()==VARIABLE) {
+                const Variable var(u.symbol());
+
+                x = &var;
+                t = &v;
+            } else {
+                const Variable var(v.symbol());
+
+                x = &var;
+                t = &u;
+            }
+
+            if (t->isFreeVariable(*x)) {
+                ok = false;
+                result.clear();
+
+                return result;
+            }
+
+            std::map<Variable, Term> update;
+
+            update.insert(std::pair<Variable, Term>(*x, *t));
+
+            for (std::map<Variable, Term>::iterator i = result.begin(); i!=result.end(); ++i) {
+                update.insert(std::pair<Variable, Term>(i->first, i->second[Substitution(*x, *t)]));
+            }
+
+            result = update;
+
+            continue;
+        }
+
+        if ((u.type()==CONSTANT || v.type()==CONSTANT) || (u.symbol()!=v.symbol())) {
+            ok = false;
+            result.clear();
+
+            return result;
+        }
+
+        conditions.pop_back();
+
+        size_t size = u.arity();
+
+        if (size!=v.arity() || size!=u.args().size() || size!=v.args().size()) {
+            throw(1);
+        }
+
+        for (size_t i = 0; i<size; ++i) {
+            conditions.push_back(std::pair<Term, Term>(u.args()[i], v.args()[i]));
+        }
+    }
+
+    ok = true;
 
     return result;
 }
