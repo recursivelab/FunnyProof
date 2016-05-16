@@ -57,6 +57,7 @@ enum SymbolType
     OPERATION,
     RELATION,
     EQUALITY,
+    NONEQUALITY,
     NEGATION,
     CONJUNCTION,
     DISJUNCTION,
@@ -188,6 +189,16 @@ public:
 
 DECLARE const EqualitySymbol& equality();
 
+class NonequalitySymbol : public Symbol
+{
+    DECLARE NonequalitySymbol();
+
+public:
+    DECLARE static const NonequalitySymbol& instance();
+};
+
+DECLARE const NonequalitySymbol& nonequality();
+
 class OperationSymbol : public Symbol
 {
 public:
@@ -276,10 +287,12 @@ public:
     class Substitution
     {
     public:
+        DECLARE Substitution();
         DECLARE Substitution(const std::map<Variable, Term> &valuation);
         DECLARE Substitution(std::map<Variable, Term> &&valuation);
         DECLARE Substitution(const Variable &variable, const Term &term);
         DECLARE Term operator ()(const Variable &variable) const;
+        DECLARE Substitution operator [](const Substitution &other) const;
 
         const std::map<Variable, Term> data;
     };
@@ -390,6 +403,14 @@ private:
         DECLARE EqualityFormulaPrivate(const Term &term1, const Term &term2);
     };
 
+    class NonequalityFormulaPrivate : public FormulaPrivate
+    {
+    public:
+        DECLARE NonequalityFormulaPrivate(const std::vector<Term> &terms);
+        DECLARE NonequalityFormulaPrivate(std::vector<Term> &&terms);
+        DECLARE NonequalityFormulaPrivate(const Term &term1, const Term &term2);
+    };
+
     class RelationFormulaPrivate : public FormulaPrivate
     {
     public:
@@ -452,11 +473,11 @@ private:
     };
 
 public:
-
     struct FalseFormula;
     struct TrueFormula;
     struct RelationFormula;
     struct EqualityFormula;
+    struct NonequalityFormula;
     struct NegationFormula;
     struct ConjunctionFormula;
     struct DisjunctionFormula;
@@ -496,6 +517,7 @@ public:
         friend struct TrueFormula;
         friend struct RelationFormula;
         friend struct EqualityFormula;
+        friend struct NonequalityFormula;
         friend struct NegationFormula;
         friend struct ConjunctionFormula;
         friend struct DisjunctionFormula;
@@ -531,6 +553,13 @@ public:
         DECLARE EqualityFormula(const std::vector<Term> &terms);
         DECLARE EqualityFormula(std::vector<Term> &&terms);
         DECLARE EqualityFormula(const Term &term1, const Term &term2);
+    };
+
+    struct NonequalityFormula : public Formula
+    {
+        DECLARE NonequalityFormula(const std::vector<Term> &terms);
+        DECLARE NonequalityFormula(std::vector<Term> &&terms);
+        DECLARE NonequalityFormula(const Term &term1, const Term &term2);
     };
 
     struct NegationFormula : public Formula

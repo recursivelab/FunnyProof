@@ -244,6 +244,23 @@ const EqualitySymbol& equality()
     return EqualitySymbol::instance();
 }
 
+NonequalitySymbol::NonequalitySymbol() :
+    Symbol(NONEQUALITY)
+{
+}
+
+const NonequalitySymbol& NonequalitySymbol::instance()
+{
+    static NonequalitySymbol result;
+
+    return result;
+}
+
+const NonequalitySymbol& nonequality()
+{
+    return NonequalitySymbol::instance();
+}
+
 OperationSymbol::OperationSymbol(std::size_t arity) :
     Symbol(OPERATION, arity)
 {
@@ -538,6 +555,10 @@ TermEnvironment::OperationTermPrivate::OperationTermPrivate(const OperationSymbo
 {
 }
 
+TermEnvironment::Substitution::Substitution()
+{
+}
+
 TermEnvironment::Substitution::Substitution(const std::map<Variable, Term> &valuation) :
     data(valuation)
 {
@@ -568,6 +589,27 @@ TermEnvironment::Term TermEnvironment::Substitution::operator ()(const Variable 
     }
 
     return Term(variable);
+}
+
+Substitution Substitution::operator [](const Substitution &other) const
+{
+    std::map<Variable, Term> result;
+
+    for (std::map<Variable, Term>::const_iterator i = other.data.cbegin(); i!=other.data.cend(); ++i) {
+        Variable x = i->first;
+        Term t = i->second;
+        Term r = t[*this];
+
+        result.insert(std::pair<Variable, Term>(x, r));
+    }
+
+    for (std::map<Variable, Term>::const_iterator i = data.cbegin(); i!=data.cend(); ++i) {
+        if (other.data.find(i->first)==data.end()) {
+            result.insert(*i);
+        }
+    }
+
+    return result;
 }
 
 TermEnvironment::Term::Term() :
@@ -779,15 +821,16 @@ Substitution TermEnvironment::unificator(std::vector<std::pair<Term, Term>> &con
                 return result;
             }
 
-            std::map<Variable, Term> update;
+//            std::map<Variable, Term> update;
 
-            update.insert(std::pair<Variable, Term>(*x, *t));
+//            update.insert(std::pair<Variable, Term>(*x, *t));
 
-            for (std::map<Variable, Term>::iterator i = result.begin(); i!=result.end(); ++i) {
-                update.insert(std::pair<Variable, Term>(i->first, i->second[Substitution(*x, *t)]));
-            }
+//            for (std::map<Variable, Term>::iterator i = result.begin(); i!=result.end(); ++i) {
+//                update.insert(std::pair<Variable, Term>(i->first, i->second[Substitution(*x, *t)]));
+//            }
 
-            result = update;
+//            result = update;
+            result = move(Substitution(*x, *t)[result].data);
 
             continue;
         }
@@ -1142,6 +1185,21 @@ FormulaEnvironment::EqualityFormulaPrivate::EqualityFormulaPrivate(std::vector<T
 
 FormulaEnvironment::EqualityFormulaPrivate::EqualityFormulaPrivate(const Term &term1, const Term &term2) :
     EqualityFormulaPrivate(TermEnvironment::twoTerms(term1, term2))
+{
+}
+
+FormulaEnvironment::NonequalityFormulaPrivate::NonequalityFormulaPrivate(const std::vector<Term> &terms) :
+    FormulaPrivate(nonequality(), terms, std::vector<Formula>())
+{
+}
+
+FormulaEnvironment::NonequalityFormulaPrivate::NonequalityFormulaPrivate(std::vector<Term> &&terms) :
+    FormulaPrivate(nonequality(), terms, std::vector<Formula>())
+{
+}
+
+FormulaEnvironment::NonequalityFormulaPrivate::NonequalityFormulaPrivate(const Term &term1, const Term &term2) :
+    NonequalityFormulaPrivate(TermEnvironment::twoTerms(term1, term2))
 {
 }
 
@@ -1533,6 +1591,21 @@ FormulaEnvironment::EqualityFormula::EqualityFormula(std::vector<Term> &&terms) 
 
 FormulaEnvironment::EqualityFormula::EqualityFormula(const Term &term1, const Term &term2) :
     Formula(new EqualityFormulaPrivate(term1, term2))
+{
+}
+
+FormulaEnvironment::NonequalityFormula::NonequalityFormula(const std::vector<Term> &terms) :
+    Formula(new NonequalityFormulaPrivate(terms))
+{
+}
+
+FormulaEnvironment::NonequalityFormula::NonequalityFormula(std::vector<Term> &&terms) :
+    Formula(new NonequalityFormulaPrivate(terms))
+{
+}
+
+FormulaEnvironment::NonequalityFormula::NonequalityFormula(const Term &term1, const Term &term2) :
+    Formula(new NonequalityFormulaPrivate(term1, term2))
 {
 }
 
