@@ -26,6 +26,7 @@
 
 class Dictionary
 {
+public:
     class Environment
     {
         std::map<std::wstring, Symbol> symbols;
@@ -39,18 +40,22 @@ class Dictionary
         DECLARE Environment(std::map<std::wstring, Symbol> &&symbols);
         DECLARE bool insert(const std::wstring &name, const Symbol &symbol);
         DECLARE bool insert(std::wstring &&name, const Symbol &symbol);
+        DECLARE bool insert(const Symbol &symbol, const std::wstring &name);
+        DECLARE bool insert(const Symbol &symbol, std::wstring &&name);
         DECLARE const Symbol& operator ()(const std::wstring &name) const;
         DECLARE std::wstring operator ()(const Symbol &symbol) const;
         DECLARE const std::map<std::wstring, Symbol>& getSymbols() const;
         DECLARE const std::map<Symbol, std::wstring>& getNames() const;
     };
 
+private:
     std::vector<Environment> environents;
 
 public:
     DECLARE Dictionary();
     DECLARE void push();
     DECLARE bool pop();
+    DECLARE bool mergeTop2Environments();
     DECLARE Symbol operator ()(const std::wstring &name) const;
     DECLARE std::wstring operator ()(const Symbol &symbol) const;
     DECLARE const Environment& getCurrentEnvironment() const;

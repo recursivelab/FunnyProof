@@ -71,6 +71,16 @@ DECLARE bool Dictionary::Environment::insert(std::wstring &&name, const Symbol &
     return false;
 }
 
+bool Dictionary::Environment::insert(const Symbol &symbol, const std::wstring &name)
+{
+    return insert(name, symbol);
+}
+
+bool Dictionary::Environment::insert(const Symbol &symbol, std::wstring &&name)
+{
+    return insert(name, symbol);
+}
+
 const Symbol& Dictionary::Environment::operator ()(const std::wstring &name) const
 {
     std::map<std::wstring, Symbol>::const_iterator i = symbols.find(name);
@@ -115,8 +125,27 @@ void Dictionary::push()
 
 bool Dictionary::pop()
 {
-    if (environents.size() == 1) {
+    if (environents.size()<=1) {
         return false;
+    }
+
+    environents.pop_back();
+
+    return true;
+}
+
+bool Dictionary::mergeTop2Environments()
+{
+    if (environents.size()<=1) {
+        return false;
+    }
+
+    const Environment &firstEnvironment = environents[environents.size()-1];
+    Environment &secondEnvironment = environents[environents.size()-2];
+    const std::map<Symbol, std::wstring> &firstNames = firstEnvironment.getNames();
+
+    for (auto i = firstNames.cbegin(); i!=firstNames.cend(); ++i) {
+        secondEnvironment.insert(i->first, i->second);
     }
 
     environents.pop_back();
