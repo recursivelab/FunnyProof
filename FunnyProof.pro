@@ -17,7 +17,8 @@ SOURCES += \
     dictionary.cpp \
     language.cpp \
     main.cpp \
-    readwrite.cpp
+    readwrite.cpp \
+    utility.cpp
 
 HEADERS  += \
     config.h \
@@ -27,6 +28,8 @@ HEADERS  += \
     language.h \
     language_imp.h \
     mainwindow.h \
-    readwrite.h
+    readwrite.h \
+    utility.h \
+    utility_imp.h
 
 FORMS    += mainwindow.ui
