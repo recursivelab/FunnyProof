@@ -20,19 +20,20 @@
 #ifndef UTILITY_IMP_H
 #define UTILITY_IMP_H
 
+#include <cwctype>
 #include "utility.h"
 
 void toLower(std::wstring &str)
 {
     for (size_t i = 0; i<str.size(); ++i) {
-        str[i] = towlower(str[i]);
+        str[i] = std::towlower(str[i]);
     }
 }
 
 void toUpper(std::wstring &str)
 {
     for (size_t i = 0; i<str.size(); ++i) {
-        str[i] = towupper(str[i]);
+        str[i] = std::towupper(str[i]);
     }
 }
 
