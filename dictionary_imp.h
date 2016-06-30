@@ -28,26 +28,18 @@ Dictionary::Environment::Environment()
 }
 
 Dictionary::Environment::Environment(const Environment &other) :
-    symbols(other.symbols)
+    symbols(other.symbols),
+    names(other.names)
 {
 }
 
 Dictionary::Environment::Environment(Environment &&other) :
-    symbols(other.symbols)
+    symbols(other.symbols),
+    names(other.names)
 {
 }
 
-Dictionary::Environment::Environment(const std::map<std::wstring, Symbol> &names) :
-    symbols(names)
-{
-}
-
-Dictionary::Environment::Environment(std::map<std::wstring, Symbol> &&names) :
-    symbols(names)
-{
-}
-
-DECLARE bool Dictionary::Environment::insert(const std::wstring &name, const Symbol &symbol)
+bool Dictionary::Environment::insert(const std::wstring &name, const Symbol &symbol)
 {
     if (symbols.find(name) == symbols.end()) {
         symbols.emplace(std::make_pair(name, symbol));
@@ -59,24 +51,7 @@ DECLARE bool Dictionary::Environment::insert(const std::wstring &name, const Sym
     return false;
 }
 
-DECLARE bool Dictionary::Environment::insert(std::wstring &&name, const Symbol &symbol)
-{
-    if (symbols.find(name) == symbols.end()) {
-        symbols.emplace(std::make_pair(static_cast<std::wstring&>(name), symbol));
-        names.emplace(std::make_pair(symbol, name));
-
-        return true;
-    }
-
-    return false;
-}
-
 bool Dictionary::Environment::insert(const Symbol &symbol, const std::wstring &name)
-{
-    return insert(name, symbol);
-}
-
-bool Dictionary::Environment::insert(const Symbol &symbol, std::wstring &&name)
 {
     return insert(name, symbol);
 }
@@ -153,6 +128,11 @@ bool Dictionary::mergeTop2Environments()
     return true;
 }
 
+size_t Dictionary::size() const
+{
+    return environents.size();
+}
+
 Symbol Dictionary::operator ()(const std::wstring &name) const
 {
     size_t i = environents.size();
@@ -188,15 +168,6 @@ std::wstring Dictionary::operator ()(const Symbol &symbol) const
 }
 
 bool Dictionary::insert(const std::wstring &name, const Symbol &symbol)
-{
-    size_t i = environents.size();
-
-    --i;
-
-    return environents[i].insert(name, symbol);
-}
-
-bool Dictionary::insert(std::wstring &&name, const Symbol &symbol)
 {
     size_t i = environents.size();
 

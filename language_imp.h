@@ -20,6 +20,7 @@
 #ifndef LANGUAGE_IMP_H
 #define LANGUAGE_IMP_H
 
+#include <algorithm>
 #include "language.h"
 
 Symbol::Symbol() :
@@ -498,7 +499,7 @@ bool TermEnvironment::TermPrivate::isFreeVariable(const Variable &variable) cons
 
 const std::set<Variable>& TermEnvironment::TermPrivate::getFreeVariables() const
 {
-    if (freeVariables == false) {
+    if ((bool)freeVariables == false) {
         std::shared_ptr<std::set<Variable>> freeVariables(new std::set<Variable>);
 
         switch (symbol.type) {
@@ -830,7 +831,7 @@ Substitution TermEnvironment::unificator(std::vector<std::pair<Term, Term>> &con
 //            }
 
 //            result = update;
-            result = move(Substitution(*x, *t)[result].data);
+            result = Substitution(*x, *t)[result].data;
 
             continue;
         }
@@ -1077,7 +1078,7 @@ bool FormulaEnvironment::FormulaPrivate::isFreeVariable(const Variable &variable
 
 const std::set<Variable>& FormulaEnvironment::FormulaPrivate::getFreeVariables() const
 {
-    if (freeVariables == false) {
+    if ((bool)freeVariables == false) {
         std::shared_ptr<std::set<Variable>> freeVariables(new std::set<Variable>);
 
         switch (symbol.type) {
@@ -1553,6 +1554,200 @@ const FormulaEnvironment::Formula& FormulaEnvironment::Formula::dummy()
     static Formula result;
 
     return result;
+}
+
+FormulaEnvironment::Formula FormulaEnvironment::Formula::simplify() const
+{
+    switch (type()) {
+    case NONE_SYMBOL:
+    case FALSE_SYMBOL:
+    case TRUE_SYMBOL:
+    case RELATION:
+    case EQUALITY:
+    case NONEQUALITY:
+        return *this;
+
+        break;
+
+    case NEGATION:
+    {
+        Formula arg = formulas()[0].simplify();
+
+        switch (arg.type()) {
+        case NONE_SYMBOL:
+            return arg;
+
+            break;
+
+        case FALSE_SYMBOL:
+            return TrueFormula();
+
+            break;
+
+        case TRUE_SYMBOL:
+            return FalseFormula();
+
+            break;
+
+        case EQUALITY:
+            if (arg.variables().size()==2) {
+                return NonequalityFormula(arg.terms());
+            }
+
+            break;
+
+        case NONEQUALITY:
+            if (arg.variables().size()==2) {
+                return EqualityFormula(arg.terms());
+            }
+
+            break;
+
+        case NEGATION:
+            return arg.formulas()[0];
+
+            break;
+
+        case CONJUNCTION:
+        case DISJUNCTION:
+        {
+            const std::vector<Formula> &formulas = arg.formulas();
+            std::vector<Formula> args;
+
+            for (auto i = formulas.cbegin(); i!=formulas.cend(); ++i) {
+                args.push_back(NegationFormula(*i).simplify());
+            }
+
+            if (arg.type()==CONJUNCTION) {
+                return FormulaEnvironment::DisjunctionFormula(args);
+            }
+
+            return FormulaEnvironment::ConjunctionFormula(args);
+        }
+
+            break;
+
+        case IMPLICATION:
+            if (arg.formulas().size()==2) {
+                Formula f1 = arg.formulas()[0];
+                Formula f2 = arg.formulas()[1];
+                Formula nf2 = FormulaEnvironment::NegationFormula(f2).simplify();
+
+                return FormulaEnvironment::ConjunctionFormula(f1, nf2);
+            }
+
+            break;
+
+        case UNIVERSAL:
+        case EXISTENTIAL:
+        {
+            Formula f = FormulaEnvironment::NegationFormula(arg.formulas()[0]).simplify();
+
+            if (arg.type()==UNIVERSAL) {
+                return FormulaEnvironment::ExistentialFormula(f, arg.variables());
+            }
+
+            return FormulaEnvironment::UniversalFormula(f, arg.variables());
+        }
+
+        default:
+            break;
+        }
+
+        return NegationFormula(arg);
+
+        break;
+    }
+
+    case CONJUNCTION:
+    case DISJUNCTION:
+    {
+        std::set<Formula> s;
+        std::vector<Formula> result;
+
+        for (auto i = formulas().cbegin(); i!=formulas().cend(); ++i) {
+            Formula arg = i->simplify();
+
+            if (arg.type()==type()) {
+                for (auto j = arg.formulas().cbegin(); j!=arg.formulas().cend(); ++j) {
+                    if (s.count(*j)==0) {
+                        s.insert(*j);
+                        result.push_back(*j);
+                    }
+                }
+            } else if (arg.type()==TRUE_SYMBOL || arg.type()==FALSE_SYMBOL) {
+                if ((type()==CONJUNCTION)!=(arg.type()==TRUE_SYMBOL)) {
+                    return arg;
+                }
+            } else {
+                if (s.count(arg)==0) {
+                    s.insert(arg);
+                    result.push_back(arg);
+                }
+            }
+        }
+
+        if (result.empty()) {
+            if (type()==CONJUNCTION) {
+                return TrueFormula();
+            }
+
+            return FalseFormula();
+        }
+
+        if (result.size()==1) {
+            return result[0];
+        }
+
+        if (type()==CONJUNCTION) {
+// TO DO: (A imp B) and (B imp C) -> A imp B imp C.
+            return FormulaEnvironment::ConjunctionFormula(result);
+        }
+
+        return FormulaEnvironment::DisjunctionFormula(result);
+    }
+
+        break;
+
+    case UNIVERSAL:
+    case EXISTENTIAL:
+    {
+        Formula f = formulas()[0].simplify();
+        std::set<Variable> freeVars = f.getFreeVariables();
+        std::set<Variable> vars;
+        std::vector<Variable> result;
+
+        for (auto i = variables().cbegin(); i!=variables().cend(); ++i) {
+            auto j = freeVars.find(*i);
+
+            if (j!=freeVars.cend()) {
+                vars.insert(*i);
+                freeVars.erase(j);
+            }
+        }
+
+        if (vars.empty()) {
+            return formulas()[0];
+        }
+
+        for (auto i = vars.cbegin(); i!=vars.cend(); ++i) {
+            result.push_back(*i);
+        }
+
+        if (type()==UNIVERSAL) {
+            return UniversalFormula(f, result);
+        }
+
+        return ExistentialFormula(f, result);
+    }
+
+        break;
+
+    default:
+        break;
+    }
+
+    return *this;
 }
 
 FormulaEnvironment::EmptyFormula::EmptyFormula()

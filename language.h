@@ -17,22 +17,29 @@
 *                                                                              *
 *******************************************************************************/
 
-// Author : Nedeljko Stefanovic
+/*!
+    \file "language.h"
 
-// Implementation of constant, operation and relation symbols, variables,
-// terms and formulas.
-//
-// These logical objects are implemented as immutable
-// objects.
-//
-// All program objects representing the same logical object pointing the same
-// internal representation even if these program objects are created independent
-// (without copy constructor). An pointed object is automaticaly deleted when
-// no objets pointing it.
-//
-// Any symbol object have it's own id. Symbol object constructed without copy
-// constructor representing a new symbol with new id.
+    \author Nedeljko Stefanovic
 
+    \brief Implementation of constant, operation and relation symbols,
+    variables, terms and formulas.
+
+    These logical objects are implemented as immutable objects.
+    Copy construction is enabled, but assignment is disabled.
+
+    All these classes have comparision operators "=", "!=" amd "<",
+    comparision function "cmp" and hash function.
+
+    All program objects representing terms and formulas shares internal
+    representation of this type of logical object. A object constructed as copy
+    of another object uses the same shared internal object.
+    Difference of addreses of internal objects does not imply difference of
+    represented logical objects.
+
+    Any symbol object have it's own id. Symbol object constructed without copy
+    constructor representing a new symbol with new id.
+*/
 
 #ifndef LANGUAGE_H
 #define LANGUAGE_H
@@ -512,6 +519,7 @@ public:
         DECLARE bool isEmpty() const;
         DECLARE Formula operator [](const TermEnvironment::Substitution &substitution) const;
         DECLARE static const Formula& dummy();
+        DECLARE Formula simplify() const;
 
         friend struct FalseFormula;
         friend struct TrueFormula;
