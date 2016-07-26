@@ -37,4 +37,30 @@ void toUpper(std::wstring &str)
     }
 }
 
+std::wstring toLower(const std::wstring &str)
+{
+    std::wstring result;
+
+    result.resize(str.size());
+
+    for (size_t i = 0; i<str.size(); ++i) {
+        result[i] = std::towlower(str[i]);
+    }
+
+    return result;
+}
+
+std::wstring toUpper(const std::wstring &str)
+{
+    std::wstring result;
+
+    result.resize(str.size());
+
+    for (size_t i = 0; i<str.size(); ++i) {
+        result[i] = std::towupper(str[i]);
+    }
+
+    return result;
+}
+
 #endif // UTILITY_IMP_H

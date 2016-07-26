@@ -19,6 +19,7 @@
 
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
+#include "error.h"
 #include "readwrite.h"
 
 MainWindow::MainWindow(QWidget *parent) :
@@ -38,7 +39,6 @@ void MainWindow::print(const QString &s)
     ui->output->appendPlainText(s);
 }
 
-
-void MainWindow::okButtonPressed()
+void MainWindow::textChanged()
 {
 }

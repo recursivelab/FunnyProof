@@ -1083,6 +1083,8 @@ const std::set<Variable>& FormulaEnvironment::FormulaPrivate::getFreeVariables()
 
         switch (symbol.type) {
         case NONE_SYMBOL:
+        case FALSE_SYMBOL:
+        case TRUE_SYMBOL:
             break;
 
         case EQUALITY:
@@ -1559,13 +1561,41 @@ const FormulaEnvironment::Formula& FormulaEnvironment::Formula::dummy()
 FormulaEnvironment::Formula FormulaEnvironment::Formula::simplify() const
 {
     switch (type()) {
-    case NONE_SYMBOL:
-    case FALSE_SYMBOL:
-    case TRUE_SYMBOL:
-    case RELATION:
     case EQUALITY:
     case NONEQUALITY:
-        return *this;
+    {
+        std::set<Term> args;
+        std::vector<Term> result;
+
+        for (size_t i = 0; i<terms().size(); ++i) {
+            Term t = terms()[i];
+
+            if (t.type()==NONE_SYMBOL) {
+                return EmptyFormula();
+            }
+
+            args.insert(t);
+            result.push_back(t);
+        }
+
+        if (result.size()<=1U) {
+            return TrueFormula();
+        }
+
+        if (result.size()!=args.size()) {
+            if (type()==EQUALITY) {
+                result.clear();
+
+                for (auto i = args.cbegin(); i!=args.cend(); ++i) {
+                    result.push_back(*i);
+                }
+
+                return EqualityFormula(result).simplify();
+            }
+
+            return FalseFormula();
+        }
+    }
 
         break;
 
@@ -1574,11 +1604,6 @@ FormulaEnvironment::Formula FormulaEnvironment::Formula::simplify() const
         Formula arg = formulas()[0].simplify();
 
         switch (arg.type()) {
-        case NONE_SYMBOL:
-            return arg;
-
-            break;
-
         case FALSE_SYMBOL:
             return TrueFormula();
 
@@ -1629,11 +1654,25 @@ FormulaEnvironment::Formula FormulaEnvironment::Formula::simplify() const
 
         case IMPLICATION:
             if (arg.formulas().size()==2) {
-                Formula f1 = arg.formulas()[0];
-                Formula f2 = arg.formulas()[1];
-                Formula nf2 = FormulaEnvironment::NegationFormula(f2).simplify();
+                Formula f1 = arg.formulas()[0].simplify();
+                Formula f2 = arg.formulas()[1].simplify();
 
-                return FormulaEnvironment::ConjunctionFormula(f1, nf2);
+                return ConjunctionFormula(f1, NegationFormula(f2).simplify());
+            }
+
+            break;
+
+            if (arg.formulas().size()==2) {
+                Formula f1 = arg.formulas()[0].simplify();
+                Formula f2 = arg.formulas()[1].simplify();
+
+                if (f1.type()==NEGATION) {
+                    return ConjunctionFormula(NegationFormula(f1).simplify(), f2);
+                }
+
+                if (f2.type()==NEGATION) {
+                    return ConjunctionFormula(f1, NegationFormula(f2).simplify());
+                }
             }
 
             break;
@@ -1662,37 +1701,37 @@ FormulaEnvironment::Formula FormulaEnvironment::Formula::simplify() const
     case CONJUNCTION:
     case DISJUNCTION:
     {
-        std::set<Formula> s;
+        std::set<Formula> args;
         std::vector<Formula> result;
 
         for (auto i = formulas().cbegin(); i!=formulas().cend(); ++i) {
-            Formula arg = i->simplify();
+            Formula f = i->simplify();
 
-            if (arg.type()==type()) {
-                for (auto j = arg.formulas().cbegin(); j!=arg.formulas().cend(); ++j) {
-                    if (s.count(*j)==0) {
-                        s.insert(*j);
-                        result.push_back(*j);
+            if (f.type()==type()) {
+                for (auto j = f.formulas().cbegin(); j!=f.formulas().cend(); ++j) {
+                    if (args.count(*j)==0) {
+                        args.insert(*j);
                     }
                 }
-            } else if (arg.type()==TRUE_SYMBOL || arg.type()==FALSE_SYMBOL) {
-                if ((type()==CONJUNCTION)!=(arg.type()==TRUE_SYMBOL)) {
-                    return arg;
+            } else if (f.type()==TRUE_SYMBOL || f.type()==FALSE_SYMBOL) {
+                if ((type()==CONJUNCTION)!=(f.type()==TRUE_SYMBOL)) {
+                    return f;
                 }
-            } else {
-                if (s.count(arg)==0) {
-                    s.insert(arg);
-                    result.push_back(arg);
-                }
+            } else if (args.count(f)==0) {
+                args.insert(f);
             }
         }
 
-        if (result.empty()) {
+        if (args.empty()) {
             if (type()==CONJUNCTION) {
                 return TrueFormula();
             }
 
             return FalseFormula();
+        }
+
+        for (auto i = args.cbegin(); i!=args.cend(); ++i) {
+            result.push_back(*i);
         }
 
         if (result.size()==1) {
@@ -1701,10 +1740,184 @@ FormulaEnvironment::Formula FormulaEnvironment::Formula::simplify() const
 
         if (type()==CONJUNCTION) {
 // TO DO: (A imp B) and (B imp C) -> A imp B imp C.
-            return FormulaEnvironment::ConjunctionFormula(result);
+            return ConjunctionFormula(result);
         }
 
-        return FormulaEnvironment::DisjunctionFormula(result);
+        return DisjunctionFormula(result);
+    }
+
+        break;
+
+    case IMPLICATION:
+    {
+        std::vector<Formula> fs;
+        std::map<Formula, size_t> indexes;
+        std::vector<size_t> representers;
+        bool hasFalse = false;
+        bool hasTrue = false;
+        size_t falsePosition;
+        size_t truePosition;
+
+        for (size_t i = 0; i<formulas().size(); ++i) {
+            Formula f = formulas()[i].simplify();
+
+            fs.push_back(f);
+
+            if (f.type()==NONE_SYMBOL) {
+                return EmptyFormula();
+            } else if (f.type()==FALSE_SYMBOL) {
+                hasFalse = true;
+                falsePosition = i;
+            } else if (hasTrue==false && f.type()==TRUE_SYMBOL) {
+                hasTrue = true;
+                truePosition = i;
+            }
+        }
+
+        if (hasFalse && hasTrue && truePosition<falsePosition) {
+            return FalseFormula();
+        }
+
+        std::vector<Formula> result;
+        size_t begin = hasFalse ? falsePosition+1 : 0;
+        size_t end = hasTrue ? truePosition : fs.size();
+
+        if (hasTrue) {
+            for (size_t i = truePosition+1; i<fs.size(); ++i) {
+                if (fs[i].type()!=TRUE_SYMBOL) {
+                    result.push_back(fs[i]);
+                }
+            }
+        }
+
+        if (hasFalse) {
+            for (size_t i = 0; i<falsePosition; ++i) {
+                if (fs[i].type()!=FALSE_SYMBOL) {
+                    result.push_back(NegationFormula(fs[i]).simplify());
+                }
+            }
+        }
+
+        for (size_t i = begin; i<end; ++i) {
+            Formula f = fs[i];
+            auto j = indexes.find(f);
+
+            if (j==indexes.cend()) {
+                indexes.insert(std::pair<Formula, size_t>(f, i));
+                representers.push_back(i);
+            } else {
+                size_t k = j->second;
+                size_t value = representers[k-begin];
+
+                for (size_t l = value+1-begin; l<representers.size(); ++l) {
+                    representers[l] = value;
+                }
+
+                representers.push_back(value);
+            }
+        }
+
+        std::map<size_t, std::set<Formula>> groups;
+
+        for (size_t i = begin; i<end; ++i) {
+            if (representers[i-begin]==i) {
+                std::set<Formula> s;
+
+                s.insert(fs[i]);
+                groups.insert(std::pair<size_t, std::set<Formula>>(i, s));
+            } else {
+                groups[representers[i-begin]].insert(fs[i]);
+            }
+        }
+
+        std::vector<Formula> equivalences;
+
+        for (auto i = groups.cbegin(); i!=groups.cend(); ++i) {
+            const std::set<Formula> &g = i->second;
+            std::vector<Formula> args;
+
+            for (auto j = g.cbegin(); j!=g.cend(); ++j) {
+                args.push_back(*j);
+            }
+
+            if (args.size()==1U) {
+                equivalences.push_back(args[0]);
+            } else {
+                equivalences.push_back(EquivalenceFormula(args));
+            }
+        }
+
+        if (equivalences.size()==formulas().size()) {
+            return ImplicationFormula(equivalences);
+        }
+
+        if (equivalences.size()==1) {
+            result.push_back(TrueFormula());
+        } else if (equivalences.size()>1) {
+            result.push_back(ImplicationFormula(equivalences));
+        }
+
+        return ConjunctionFormula(result);
+    }
+
+        break;
+
+    case EQUIVALENCE:
+    {
+        std::set<Formula> args;
+        std::vector<Formula> result;
+        bool hasFalse = false;
+        bool hasTrue = false;
+
+        for (size_t i = 0; i<formulas().size(); ++i) {
+            Formula f = formulas()[i].simplify();
+
+            if (f.type()==NONE_SYMBOL) {
+                return EmptyFormula();
+            } else if (f.type()==FALSE_SYMBOL) {
+                hasFalse = true;
+
+                continue;
+            } else if (f.type()==TRUE_SYMBOL) {
+                hasTrue = true;
+
+                continue;
+            }
+
+            args.insert(f);
+        }
+
+        if (hasFalse && hasTrue) {
+            return FalseFormula();
+        }
+
+        if (args.empty()) {
+            return TrueFormula();
+        }
+
+        for (auto i = args.cbegin(); i!=args.end(); ++i) {
+            result.push_back(*i);
+        }
+
+        if (result.size()==1) {
+            return TrueFormula();
+        }
+
+        if (hasFalse) {
+            std::vector<Formula> negatedFormulas;
+
+            for (size_t i = 0; i<result.size(); ++i) {
+                negatedFormulas.push_back(NegationFormula(result[i]));
+            }
+
+            return ConjunctionFormula(negatedFormulas).simplify();
+        }
+
+        if (hasTrue) {
+            return ConjunctionFormula(result).simplify();
+        }
+
+        return EquivalenceFormula(result);
     }
 
         break;
@@ -1726,8 +1939,18 @@ FormulaEnvironment::Formula FormulaEnvironment::Formula::simplify() const
             }
         }
 
+        const Formula *subformula = &f;
+
+        if (f.type()==type()) {
+            for (auto i = f.variables().cbegin(); i!=f.variables().cend(); ++i) {
+                vars.insert(*i);
+            }
+
+            subformula = &(f.formulas()[0]);
+        }
+
         if (vars.empty()) {
-            return formulas()[0];
+            return *subformula;
         }
 
         for (auto i = vars.cbegin(); i!=vars.cend(); ++i) {
@@ -1735,10 +1958,10 @@ FormulaEnvironment::Formula FormulaEnvironment::Formula::simplify() const
         }
 
         if (type()==UNIVERSAL) {
-            return UniversalFormula(f, result);
+            return UniversalFormula(*subformula, result);
         }
 
-        return ExistentialFormula(f, result);
+        return ExistentialFormula(*subformula, result);
     }
 
         break;

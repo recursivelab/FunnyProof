@@ -40,7 +40,12 @@ enum ExceptionType
     EQUALITY_EXPECTED,
     NONEQUALITY_UNEXPECTED,
     EQUALITY_OR_NONEQUALITY_EXPECTED,
-    FORMULA_EXPECTED
+    FORMULA_EXPECTED,
+    CONJUNCTION_EXPECTED,
+    DISJUNCTION_EXPECTED,
+    CONJUNCTION_OR_DISJUNCTION_EXPECTED,
+    IMPLICATION_OR_EQUIVALENCE_EXPECTED,
+    QUANTIFIER_EXPECTED
 };
 
 struct Exception
@@ -209,17 +214,17 @@ struct EqualityExpectedException : public Exception
     }
 };
 
-struct NonexpectedNonequalityException : public Exception
+struct UnexpectedNonequalityException : public Exception
 {
-    NonexpectedNonequalityException() :
+    UnexpectedNonequalityException() :
         Exception(NONEQUALITY_UNEXPECTED, L"Nonequality is unexpected")
     {
     }
 };
 
-struct ExpectedEqualityOrNonequalityException : public Exception
+struct EqualityOrNonequalityExpectedException : public Exception
 {
-    ExpectedEqualityOrNonequalityException() :
+    EqualityOrNonequalityExpectedException() :
         Exception(EQUALITY_OR_NONEQUALITY_EXPECTED, L"Equality or nonequality is expected")
     {
     }
@@ -229,6 +234,46 @@ struct FormulaExpectedException : public Exception
 {
     FormulaExpectedException() :
         Exception(FORMULA_EXPECTED, L"Formula is expected")
+    {
+    }
+};
+
+struct ConjunctionExpectedException : public Exception
+{
+    ConjunctionExpectedException() :
+        Exception(CONJUNCTION_EXPECTED, L"Conjunction is expected")
+    {
+    }
+};
+
+struct DisjunctionExpectedException : public Exception
+{
+    DisjunctionExpectedException() :
+        Exception(DISJUNCTION_EXPECTED, L"Disjunction is expected")
+    {
+    }
+};
+
+struct ConjunctionOrDisjunctionExpectedException : public Exception
+{
+    ConjunctionOrDisjunctionExpectedException() :
+        Exception(CONJUNCTION_OR_DISJUNCTION_EXPECTED, L"Conjunction or disjunction is expected")
+    {
+    }
+};
+
+struct ImplicationOrEquivalenceExpectedException : public Exception
+{
+    ImplicationOrEquivalenceExpectedException() :
+        Exception(IMPLICATION_OR_EQUIVALENCE_EXPECTED, L"Implication or equivalence is expected")
+    {
+    }
+};
+
+struct QuantifierExpectedException : public Exception
+{
+    QuantifierExpectedException() :
+        Exception(QUANTIFIER_EXPECTED, L"Quantifier is expected")
     {
     }
 };

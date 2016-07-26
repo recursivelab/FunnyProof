@@ -25,5 +25,7 @@
 
 DECLARE void toLower(std::wstring &str);
 DECLARE void toUpper(std::wstring &str);
+DECLARE std::wstring toLower(const std::wstring &str);
+DECLARE std::wstring toUpper(const std::wstring &str);
 
 #endif // UTILITY_H

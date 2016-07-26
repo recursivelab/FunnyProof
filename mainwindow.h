@@ -39,7 +39,7 @@ private:
     void print(const QString &s);
 
 private slots:
-    void okButtonPressed();
+    void textChanged();
 };
 
 #endif // MAINWINDOW_H

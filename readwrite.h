@@ -44,6 +44,7 @@
 #define READWRITE_H
 
 #include "dictionary.h"
+#include "error.h"
 
 class Symbolic
 {
@@ -52,6 +53,7 @@ public:
     std::wstring falseSymbol;
     std::wstring trueSymbol;
     std::wstring equalitySymbol;
+    std::wstring nonequalitySymbol;
     std::wstring negationSymbol;
     std::wstring conjunctionSymbol;
     std::wstring disjunctionSymbol;
@@ -97,16 +99,33 @@ public:
 class Reader
 {
 public:
+    std::wstring messageText;
+    size_t messagePos;
+    size_t pos;
+    std::wstring str;
+    Dictionary &dictionary;
+
+    void updateMessage(const Exception &e);
+
+public:
     Symbolic symbolic;
 
-    Reader();
+    Reader(const std::wstring &str, Dictionary &dictionary);
+    Reader(std::wstring &&str, Dictionary &dictionary);
     virtual ~Reader();
     virtual bool isName(const std::wstring &str) const;
+    virtual void getToken(std::wstring &token);
+    virtual Variable getVariable(const std::wstring &token, std::wstring &name);
+    virtual ConstantSymbol getConstant(const std::wstring &token, std::wstring &name);
+    virtual OperationSymbol getOperation(const std::wstring &token, std::wstring &name, size_t arity);
+    virtual RelationSymbol getRelation(const std::wstring &token, std::wstring &name, size_t arity);
+    void expectToken(const std::wstring &token);
     // Parses token from string str from given position pos and stores result into token.
     // If succeds, returns true and pos is after readed token.
     // If fails, returns false and pos is at error position.
-    virtual void getToken(const std::wstring &str, size_t &pos, std::wstring &token) const;
-    Symbol getSymbol(const std::wstring &str, size_t &pos, Dictionary &dictionary, std::wstring &name, size_t *arity = nullptr) const;
+    virtual Term parseTerm();
+    virtual std::vector<Term> parseTermList();
+    Symbol getSymbol(const std::wstring &str, std::wstring &name, size_t *arity = nullptr);
     // Parses single textual token from string str from position pos and expects given token given as token.
     // Parses single textual token from string str from position pos and expects given token given as token.
     // If given token is found, pos is updated to position after readed token and true is returned.
@@ -115,14 +134,10 @@ public:
     // Parses from string str and position pos a list of terms bounded by parentheses '(' and ')' and separated by comma.
     // If succeds, returns vector of readed terms, sets ok to true, and updates pos after ter.
     // If fails, returns empty vector of terms and ok sets to false.
-    virtual std::vector<Term> parseTermList(const std::wstring &str, Dictionary &dictionary, size_t &pos) const;
-    virtual Term parseTerm(const std::wstring &str, Dictionary &dictionary, size_t &pos) const;
-    virtual Term parseTerm(const std::wstring &str, Dictionary &dictionary) const;
-    virtual Formula parseFirstSubformula(const std::wstring &str, Dictionary &dictionary, size_t &pos) const;
-    virtual Formula parseConDis(const std::wstring &str, Dictionary &dictionary, size_t &pos) const;
-    virtual Formula parseImpEqu(const std::wstring &str, Dictionary &dictionary, size_t &pos) const;
-    virtual Formula parseFormula(const std::wstring &str, Dictionary &dictionary, size_t &pos) const;
-    virtual Formula parseFormula(const std::wstring &str, Dictionary &dictionary) const;
+    virtual Formula parseFirstSubformula();
+    virtual Formula parseConDis();
+    virtual Formula parseImpEqu();
+    virtual Formula parseFormula();
 };
 
 #endif // READWRITE_H

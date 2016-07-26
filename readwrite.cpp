@@ -18,7 +18,6 @@
 *******************************************************************************/
 
 #include <cwctype>
-#include "error.h"
 #include "readwrite.h"
 #include "utility.h"
 
@@ -50,11 +49,53 @@ public:
     }
 };
 
+//class PositionSaver
+//{
+//    size_t oldPos;
+//    size_t &pos;
+//    size_t &lastPos;
+
+//public:
+//    PositionSaver(size_t &pos, size_t lastPos) :
+//        oldPos(pos),
+//        pos(pos),
+//        lastPos(lastPos)
+//    {
+//        lastPos = pos;
+//    }
+
+//    ~PositionSaver()
+//    {
+//        lastPos = pos;
+//        pos = oldPos;
+//    }
+//};
+
+#define EXTEND_DICTIONARY DictionaryExtender extender(dictionary)
+#define CASE_BEGIN \
+{\
+    size_t oldPos = pos;\
+    \
+    try {\
+        DictionaryExtender dictionaryExtender(dictionary);
+
+#define CASE_END \
+    } catch(const Exception &e) {\
+        if (messageText.empty() || pos>=messagePos) {\
+            messageText = e.description;\
+            messagePos = pos;\
+        }\
+        \
+        pos = oldPos;\
+    }\
+}
+
 Symbolic::Symbolic() :
     noneSymbol(L"↑"),
     falseSymbol(L"⊥"),
     trueSymbol(L"⊤"),
     equalitySymbol(L"="),
+    nonequalitySymbol(L"≠"),
     negationSymbol(L"¬"),
     conjunctionSymbol(L"∧"),
     disjunctionSymbol(L"∨"),
@@ -111,6 +152,7 @@ size_t Writer::arity(SymbolType type) const
     case FALSE_SYMBOL:
     case TRUE_SYMBOL:
     case EQUALITY:
+    case NONEQUALITY:
     case RELATION:
         return 0;
 
@@ -301,6 +343,21 @@ std::wstring Writer::operator ()(const Formula &formula, const Dictionary &dicti
 
         break;
 
+    case NONEQUALITY:
+        if (formula.terms().size()<=1) {
+            return symbolic.trueSymbol;
+        }
+
+        if (formula.terms().size()==2) {
+            result += (*this)(formula.terms()[0], dictionary);
+            result += symbolic.nonequalitySymbol;
+            result += (*this)(formula.terms()[1], dictionary);
+        } else {
+            throw(1);
+        }
+
+        break;
+
     case RELATION:
         result = dictionary(formula.symbol());
 
@@ -422,7 +479,25 @@ std::wstring Writer::operator ()(const Formula &formula, const Dictionary &dicti
     return result;
 }
 
-Reader::Reader()
+void Reader::updateMessage(const Exception &e)
+{
+    if (messageText.empty() || pos>messagePos) {
+        messagePos = pos;
+        messageText = e.description;
+    }
+}
+
+Reader::Reader(const std::wstring &str, Dictionary &dictionary) :
+    pos(0),
+    str(str),
+    dictionary(dictionary)
+{
+}
+
+Reader::Reader(std::wstring &&str, Dictionary &dictionary) :
+    pos(0),
+    str(str),
+    dictionary(dictionary)
 {
 }
 
@@ -430,27 +505,9 @@ Reader::~Reader()
 {
 }
 
-bool Reader::isName(const std::wstring &str) const
+void Reader::getToken(std::wstring &token)
 {
-    if (str.empty()) {
-        return false;
-    }
-
-    if (iswalpha(str[0])==false) {
-        return false;
-    }
-
-    for (size_t i = 1; i<str.size(); ++i) {
-        if (iswalnum(str[i])==false) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-void Reader::getToken(const std::wstring &str, size_t &pos, std::wstring &token) const
-{
+    CASE_BEGIN
     token.clear();
 
     while (pos<str.size() && iswspace(str[pos])) {
@@ -490,15 +547,64 @@ void Reader::getToken(const std::wstring &str, size_t &pos, std::wstring &token)
         throw(AlphaExpectedException());
     }
 
-    token += ch;
     ++pos;
 
     if (pos<str.size() && str[pos]==L'_') {
-        switch (str[pos-1]) {
+        ++pos;
+
+        if (pos>=str.size() || iswalpha(str[pos])==false) {
+            throw(AlphaExpectedException());
+        }
+
+        while (pos<str.size() && iswalnum(str[pos])) {
+            token += str[pos++];
+        }
+
+        Symbol s = dictionary(token);
+
+        switch (ch) {
         case L'v':
+            if (s.type==NONE_SYMBOL) {
+                Variable v;
+
+                dictionary.insert(token, v);
+                dictionaryExtender.merge();
+            } else if (s.type!=VARIABLE) {
+                throw(VariableExpectedException());
+            }
+
+            return;
+
+            break;
         case L'c':
+            if (s.type==NONE_SYMBOL) {
+                ConstantSymbol c;
+
+                dictionary.insert(token, c);
+                dictionaryExtender.merge();
+            } else if (s.type!=CONSTANT) {
+                throw(ConstantExpectedException());
+            }
+
+            return;
+
         case L'f':
+            if (s.type==NONE_SYMBOL) {
+                token = std::wstring(L"f_")+token;
+            } else if (s.type!=OPERATION) {
+                throw(OperationExpectedException());
+            }
+
+            return;
+
         case L'R':
+            if (s.type==NONE_SYMBOL) {
+                token = std::wstring(L"R_")+token;
+            } else if (s.type!=RELATION) {
+                throw(RelationExpectedException());
+            }
+
+            return;
 
             break;
 
@@ -507,604 +613,621 @@ void Reader::getToken(const std::wstring &str, size_t &pos, std::wstring &token)
 
             break;
         }
-
-        token += str[pos++];
-
-        if (pos>=str.size() || iswalpha(str[pos]) == false) {
-            throw(AlphaExpectedException());
-        }
-
-        token += str[pos++];
-
-        while (pos<str.size() && iswalnum(str[pos])) {
-            token += str[pos++];
-        }
-
-        if (token.size()==2) {
-            token.clear();
-
-            throw(UnexpectedEndException());
-        }
     }
+
+    --pos;
 
     while (pos<str.size() && iswalnum(str[pos])) {
         token += str[pos++];
     }
+
+    return;
+
+    CASE_END
+
+    throw(UnexpectedEndException());
 }
 
-Symbol Reader::getSymbol(const std::wstring &str, size_t &pos, Dictionary &dictionary, std::wstring &name, size_t *arity) const
+void Reader::expectToken(const std::wstring &token)
 {
-    std::wstring token;
+    std::wstring readedToken;
 
-    name.clear();
-    getToken(str, pos, token);
+    CASE_BEGIN
+    getToken(readedToken);
+
+    if (readedToken!=token) {
+        throw(WrongTokenException(token, readedToken));
+    }
+
+    return;
+
+    CASE_END
+
+    throw(UnexpectedEndException());
+}
+
+bool Reader::isName(const std::wstring &str) const
+{
+    if (str.empty()) {
+        return false;
+    }
+
+    if (iswalpha(str[0])==false) {
+        return false;
+    }
+
+    for (size_t i = 1; i<str.size(); ++i) {
+        if (iswalnum(str[i])==false) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+Variable Reader::getVariable(const std::wstring &token, std::wstring &name)
+{
+    CASE_BEGIN
 
     if (token.size()>2 && token[1]==L'_') {
-        name = token.substr(2);
-
-        if (isName(name)==false) {
-            throw(NameExpectedException());
-        }
-
-        switch (token[0]) {
-        case L'c':
-        {
-            Symbol s = dictionary(name);
-
-            if (s.type==CONSTANT) {
-                return s;
-            }
-
-            if (s.type!=NONE_SYMBOL) {
-                name.clear();
-
-                throw(ConstantExpectedException());
-            }
-
-            ConstantSymbol c;
-            DictionaryExtender extender(dictionary);
-
-            if (dictionary.insert(name, c)) {
-                extender.merge();
-
-                return c;
-            }
-
-            name.clear();
-
-            throw(ConstantExpectedException());
-        }
-            break;
-
-        case L'v':
-        {
-            Symbol s = dictionary(name);
-
-            if (s.type==VARIABLE) {
-                return s;
-            }
-
-            if (s.type!=NONE_SYMBOL) {
-                name.clear();
-
-                throw(VariableExpectedException());
-            }
-
-            Variable v;
-            DictionaryExtender extender(dictionary);
-
-            if (dictionary.insert(name, v)) {
-                extender.merge();
-
-                return v;
-            }
-
+        if (token[0]!=L'v') {
             name.clear();
 
             throw(VariableExpectedException());
         }
-            break;
 
-        case L'f':
-        {
-            Symbol s = dictionary(name);
+        name = token.substr(2);
+    } else {
+        name = token;
+    }
 
-            if (s.type==OPERATION) {
-                if (arity!=nullptr && s.arity!=*arity) {
-                    name.clear();
+    if (isName(name)==false) {
+        name.clear();
 
-                    throw(WrongArityException(*arity, s.arity));
-                }
+        throw(VariableExpectedException());
+    }
 
-                return s;
-            }
+    Symbol s = dictionary(name);
 
-            if (s.type!=NONE_SYMBOL || arity==nullptr) {
-                name.clear();
+    if (s.type==VARIABLE) {
+        return s;
+    }
 
-                throw(OperationExpectedException());
-            }
+    if (s.type!=NONE_SYMBOL) {
+        name.clear();
 
-            OperationSymbol f(*arity);
-            DictionaryExtender extender(dictionary);
+        throw(VariableExpectedException());
+    }
 
-            if (dictionary.insert(name, f)) {
-                extender.merge();
+    Variable v;
 
-                return f;
-            }
+    dictionary.insert(name, v);
+    dictionaryExtender.merge();
 
+    return v;
+
+    CASE_END
+
+    throw(VariableExpectedException());
+}
+
+ConstantSymbol Reader::getConstant(const std::wstring &token, std::wstring &name)
+{
+    CASE_BEGIN
+
+    if (token.size()>2 && token[1]==L'_') {
+        if (token[0]!=L'c') {
+            name.clear();
+
+            throw(ConstantExpectedException());
+        }
+
+        name = token.substr(2);
+    } else {
+        name = token;
+    }
+
+    if (isName(name)==false) {
+        name.clear();
+
+        throw(ConstantExpectedException());
+    }
+
+    Symbol s = dictionary(name);
+
+    if (s.type==CONSTANT) {
+        return s;
+    }
+
+    if (s.type!=NONE_SYMBOL) {
+        name.clear();
+
+        throw(ConstantExpectedException());
+    }
+
+    ConstantSymbol c;
+
+    dictionary.insert(name, c);
+    dictionaryExtender.merge();
+
+    return c;
+
+    CASE_END
+
+    throw(ConstantExpectedException());
+}
+
+OperationSymbol Reader::getOperation(const std::wstring &token, std::wstring &name, size_t arity)
+{
+    CASE_BEGIN
+
+    if (token.size()>2 && token[1]==L'_') {
+        if (token[0]!=L'f') {
             name.clear();
 
             throw(OperationExpectedException());
         }
 
-            break;
+        name = token.substr(2);
+    } else {
+        name = token;
+    }
 
-        case L'R':
-        {
-            Symbol s = dictionary(name);
+    if (isName(name)==false) {
+        name.clear();
 
-            if (s.type==RELATION) {
-                if (arity!=nullptr && s.arity!=*arity) {
-                    name.clear();
+        throw(OperationExpectedException());
+    }
 
-                    throw(WrongArityException(*arity, s.arity));
-                }
+    Symbol s = dictionary(name);
 
-                return s;
-            }
+    if (s.type==OPERATION) {
+        if (s.arity!=arity) {
+            throw(WrongArityException(arity, s.arity));
+        }
 
-            if (s.type!=NONE_SYMBOL || arity==nullptr) {
-                name.clear();
+        dictionaryExtender.merge();
 
-                throw(RelationExpectedException());
-            }
+        return s;
+    }
 
-            RelationSymbol f(*arity);
-            DictionaryExtender extender(dictionary);
+    if (s.type!=NONE_SYMBOL) {
+        name.clear();
 
-            if (dictionary.insert(name, f)) {
-                extender.merge();
+        throw(OperationExpectedException());
+    }
 
-                return f;
-            }
+    OperationSymbol op(arity);
 
+    dictionary.insert(name, op);
+    dictionaryExtender.merge();
+
+    return op;
+
+    CASE_END
+
+    throw(OperationExpectedException());
+}
+
+RelationSymbol Reader::getRelation(const std::wstring &token, std::wstring &name, size_t arity)
+{
+    CASE_BEGIN
+
+    if (token.size()>2 && token[1]==L'_') {
+        if (token[0]!=L'R') {
             name.clear();
 
             throw(RelationExpectedException());
         }
 
-            break;
+        name = token.substr(2);
+    } else {
+        name = token;
+    }
+
+    if (isName(name)==false) {
+        name.clear();
+
+        throw(RelationExpectedException());
+    }
+
+    Symbol s = dictionary(name);
+
+    if (s.type==RELATION) {
+        if (s.arity!=arity) {
+            throw(WrongArityException(arity, s.arity));
         }
 
-        throw(OneOfExpectedException(L"cvfR"));
+        dictionaryExtender.merge();
+
+        return s;
+    }
+
+    if (s.type!=NONE_SYMBOL) {
+        name.clear();
+
+        throw(RelationExpectedException());
+    }
+
+    RelationSymbol r(arity);
+
+    dictionary.insert(name, r);
+    dictionaryExtender.merge();
+
+    return r;
+
+    CASE_END
+
+    throw(RelationExpectedException());
+}
+
+Term Reader::parseTerm()
+{
+    std::wstring token;
+    std::wstring name;
+
+    CASE_BEGIN
+    getToken(token);
+
+    if (token.size()>2 && token[1]==L'_') {
+        if (token[0]!=L'f') {
+            throw(OperationExpectedException());
+        }
+
+        token = token.substr(2);
+    }
+
+    if (isName(token)==false) {
+        throw(NameExpectedException());
     }
 
     Symbol s = dictionary(token);
 
-    if (s.type==NONE_SYMBOL) {
-        throw(SymbolNotFoundException());
+    if (s.type!=NONE_SYMBOL && s.type!=OPERATION) {
+        throw(OperationExpectedException());
     }
 
-    if (arity!=nullptr && (s.type==OPERATION || s.type==RELATION) && (s.arity!=*arity)) {
-        throw(WrongArityException(*arity, s.arity));
+    std::vector<Term> terms = parseTermList();
+    OperationSymbol op = getOperation(token, name, terms.size());
+
+    dictionaryExtender.merge();
+
+    return Term(op, terms);
+
+    CASE_END
+    CASE_BEGIN
+    getToken(token);
+
+    ConstantSymbol c = getConstant(token, name);
+
+    dictionaryExtender.merge();
+
+    return Term(c);
+
+    CASE_END
+    CASE_BEGIN
+    getToken(token);
+
+    if (isName(token)==false) {
+        throw(NameExpectedException());
     }
 
-    name = token;
+    Variable v = getVariable(token, name);
 
-    return s;
-}
+    dictionaryExtender.merge();
 
-void Reader::expectToken(const std::wstring &str, size_t &pos, const std::wstring &token) const
-{
-    std::wstring readedToken;
+    return Term(v);
 
-    getToken(str, pos, readedToken);
-
-    if (readedToken!=token) {
-        throw(WrongTokenException(token, readedToken));
-    }
-}
-
-std::vector<Term> Reader::parseTermList(const std::wstring &str, Dictionary &dictionary, size_t &pos) const
-{
-    std::wstring token;
-    std::vector<Term> result;
-
-    expectToken(str, pos, L"(");
-
-    try {
-        expectToken(str, pos, L")");
-    } catch(WrongTokenException &e) {
-        DictionaryExtender extender(dictionary);
-
-        try {
-            while (true) {
-                Term t = parseTerm(str, dictionary, pos);
-
-                result.push_back(t);
-                getToken(str, pos, token);
-
-                if (token==L")") {
-                    extender.merge();
-
-                    return result;
-                }
-
-                expectToken(str, pos, L",");
-            }
-        } catch(Exception &e) {
-            throw(e);
-        }
-    }
-
-    return result;
-}
-
-Term Reader::parseTerm(const std::wstring &str, Dictionary &dictionary, size_t &pos) const
-{
-    std::wstring token;
-    DictionaryExtender extender(dictionary);
-
-    try {
-        Symbol s = getSymbol(str, pos, dictionary, token);
-
-        switch (s.type) {
-        case CONSTANT:
-            extender.merge();
-
-            return TermEnvironment::Term(ConstantSymbol(s));
-
-            break;
-
-        case VARIABLE:
-            extender.merge();
-
-            return TermEnvironment::Term(Variable(s));
-
-            break;
-
-        case OPERATION:
-        {
-            std::vector<Term> terms = parseTermList(str, dictionary, pos);
-
-            if (terms.size()==s.arity) {
-                extender.merge();
-
-                return TermEnvironment::Term(OperationSymbol(s), std::move(terms));
-            }
-        }
-
-            break;
-
-        default:
-
-            break;
-        }
-    } catch(const SymbolNotFoundException&) {
-    }
+    CASE_END
 
     throw(TermExpectedException());
 }
 
-Term Reader::parseTerm(const std::wstring &str, Dictionary &dictionary) const
+std::vector<Term> Reader::parseTermList()
 {
-    size_t pos = 0;
+    std::wstring token;
+    std::vector<Term> result;
 
-    return parseTerm(str, dictionary, pos);
-}
-
-Formula Reader::parseFirstSubformula(const std::wstring &str, Dictionary &dictionary, size_t &pos) const
-{
-    size_t p = pos;
-    std::vector<Term> terms;
-    DictionaryExtender extender(dictionary);
-
-    try {
-        Term t = parseTerm(str, dictionary, pos);
-
-        terms.push_back(t);
-
-        std::wstring token;
-
-        while (true) {
-            bool end = false;
-
-            p = pos;
-
-            try {
-                getToken(str, pos, token);
-            } catch(const UnexpectedEndException&) {
-                end = true;
-            }
-
-            if (end) {
-                break;
-            }
-
-            toLower(token);
-
-            if (token==L"=") {
-                Term t2 = parseTerm(str, dictionary, pos);
-
-                terms.push_back(t2);
-            } else if (token==L"neq") {
-                if (terms.size()==1) {
-                    Term t2 = parseTerm(str, dictionary, pos);
-
-                    terms.push_back(t2);
-                    extender.merge();
-
-                    return FormulaEnvironment::NonequalityFormula(std::move(terms));
-                } else {
-                    throw(NonexpectedNonequalityException());
-                }
-            } else {
-                pos = p;
-
-                break;
-            }
-        }
-
-        if (terms.size()==1) {
-            throw(ExpectedEqualityOrNonequalityException());
-        }
-
-        extender.merge();
-
-        return FormulaEnvironment::EqualityFormula(std::move(terms));
-    } catch(const TermExpectedException&) {
-        try {
-            std::wstring token;
-
-            pos = p;
-            getToken(str, pos, token);
-
-            std::wstring lowerToken = token;
-
-            toLower(lowerToken);
-
-            if (lowerToken==L"false") {
-                extender.merge();
-
-                return FormulaEnvironment::FalseFormula();
-            }
-
-            if (lowerToken==L"true") {
-                extender.merge();
-
-                return FormulaEnvironment::TrueFormula();
-            }
-
-            if (lowerToken==L"not") {
-                p = pos;
-
-                Formula f = parseFirstSubformula(str, dictionary, pos);
-
-                extender.merge();
-
-                return FormulaEnvironment::NegationFormula(f);
-            }
-
-            if (lowerToken==L"(") {
-                p = pos;
-                getToken(str, pos, token);
-                toLower(token);
-
-                bool forall = token==L"forall";
-                bool exists = forall==false && token==L"exists";
-
-                if (forall || exists) {
-                    std::vector<Variable> variables;
-
-                    while (true) {
-                        getToken(str, pos, token);
-
-                        if (token==L",") {
-                            getToken(str, pos, token);
-                        }
-
-                        if (token==L")") {
-                            break;
-                        }
-
-                        if (isName(token)==false) {
-                            throw(VariableExpectedException());
-                        }
-
-                        Symbol s = dictionary(token);
-
-                        if (s.type==NONE_SYMBOL) {
-                            Variable x;
-
-                            dictionary.insert(token, x);
-                            variables.push_back(x);
-                        } else if (s.type==VARIABLE) {
-                            Variable x(s);
-
-                            variables.push_back(x);
-                        } else {
-                            throw(VariableExpectedException());
-                        }
-                    }
-
-                    if (variables.empty()) {
-                        throw(VariableExpectedException());
-                    }
-
-                    Formula f = parseFirstSubformula(str, dictionary, pos);
-
-                    extender.merge();
-
-                    if (forall) {
-                        return FormulaEnvironment::UniversalFormula(f, std::move(variables));
-                    }
-
-                    return FormulaEnvironment::ExistentialFormula(f, std::move(variables));
-                }
-
-                Formula f = parseImpEqu(str, dictionary, pos);
-
-                expectToken(str, pos, L")");
-                extender.merge();
-
-                return f;
-            }
-
-            Symbol s = dictionary(token);
-
-            if (s.type==NONE_SYMBOL) {
-                std::vector<Term> terms = parseTermList(str, dictionary, pos);
-                RelationSymbol r(terms.size());
-
-                extender.merge();
-
-                return FormulaEnvironment::RelationFormula(r, std::move(terms));
-            }
-
-            if (s.type==RELATION) {
-                std::vector<Term> terms = parseTermList(str, dictionary, pos);
-
-                if (terms.size()!=s.arity) {
-                    throw(WrongArityException(s.arity, terms.size()));
-                }
-
-                RelationSymbol r(s);
-
-                extender.merge();
-
-                return FormulaEnvironment::RelationFormula(r, std::move(terms));
-            }
-
-            throw(FormulaExpectedException());
-        } catch(const Exception &e) {
-            throw(e);
-        }
-    } catch (const Exception &e) {
-        throw(e);
-    }
-}
-
-Formula Reader::parseConDis(const std::wstring &str, Dictionary &dictionary, size_t &pos) const
-{
-    std::vector<Formula> formulas;
-    bool conjunction;
-    DictionaryExtender extender(dictionary);
+    CASE_BEGIN
+    expectToken(L"(");
 
     while (true) {
-        bool conj;
-        bool disj;
+        CASE_BEGIN
+        Term t = parseTerm();
 
-        try {
-            Formula f = parseFirstSubformula(str, dictionary, pos);
+        result.push_back(t);
+        dictionaryExtender.merge();
+        getToken(token);
 
-            formulas.push_back(f);
-
-            std::wstring token;
-            size_t p = pos;
-            bool end = false;
-
-            try {
-                getToken(str, pos, token);
-            } catch (const UnexpectedEndException&) {
-                end = true;
-            }
-
-            if (end) {
-                break;
-            }
-
-            toLower(token);
-            conj = token==L"and";
-            disj = conj==false && token==L"or";
-
-            if (conj==false && disj==false) {
-                pos = p;
-
-                break;
-            }
-        } catch(const Exception &e) {
-            throw(e);
+        if (token==L")") {
+            break;
         }
 
-        if (formulas.size()==1) {
-            conjunction = conj;
+        if (token!=L",") {
+            throw(OneOfExpectedException(L",)"));
+        }
+
+        continue;
+
+        CASE_END
+        CASE_BEGIN
+
+        getToken(token);
+
+        if (result.empty() && token==L")") {
+            break;
+        }
+
+        CASE_END
+
+        throw(TermExpectedException());
+    }
+
+    dictionaryExtender.merge();
+
+    return result;
+
+    CASE_END
+
+    throw(TermExpectedException());
+}
+
+Formula Reader::parseFirstSubformula()
+{
+    std::wstring token;
+    std::wstring name;
+
+    CASE_BEGIN
+
+    Term t = parseTerm();
+    std::vector<Term> terms;
+
+    terms.push_back(t);
+
+    while (true) {
+        CASE_BEGIN
+        getToken(token);
+
+        if (token==L"=") {
+            terms.push_back(parseTerm());
+        } else if (token==L"neq") {
+            if (terms.size()==1) {
+                terms.push_back(parseTerm());
+                dictionaryExtender.merge();
+
+                return FormulaEnvironment::NonequalityFormula(terms);
+            }
+
+            throw(UnexpectedNonequalityException());
         } else {
-            if (conjunction!=conj) {
-
-                return Formula();
-            }
+            throw(EqualityOrNonequalityExpectedException());
         }
+
+        continue;
+
+        CASE_END
+
+        break;
+    }
+
+    if (terms.size()==1) {
+        throw(EqualityOrNonequalityExpectedException());
+    }
+
+    dictionaryExtender.merge();
+
+    return FormulaEnvironment::EqualityFormula(terms);
+
+    CASE_END
+    CASE_BEGIN
+    getToken(token);
+
+    if (token==L"false") {
+        dictionaryExtender.merge();
+
+        return FormulaEnvironment::FalseFormula();
+    }
+
+    if (token==L"true") {
+        dictionaryExtender.merge();
+
+        return FormulaEnvironment::TrueFormula();
+    }
+
+    if (token==L"not") {
+        Formula f = parseFirstSubformula();
+
+        dictionaryExtender.merge();
+
+        return FormulaEnvironment::NegationFormula(f);
+    }
+
+    throw(FormulaExpectedException());
+
+    CASE_END
+    CASE_BEGIN
+
+    expectToken(L"(");
+    getToken(token);
+    toLower(token);
+
+    bool universal = token==L"forall";
+    bool existential = token==L"exists";
+
+    if (universal==false && existential==false) {
+        throw(QuantifierExpectedException());
+    }
+
+    std::vector<Variable> variables;
+
+    while (true) {
+        getToken(token);
+
+        if (token==L")") {
+            break;
+        }
+
+        if (token==L",") {
+            if (variables.empty()) {
+                throw(VariableExpectedException());
+            }
+
+            getToken(token);
+        }
+
+        std::wstring name;
+
+        variables.push_back(getVariable(token, name));
+    }
+
+    Formula f = parseFirstSubformula();
+
+    dictionaryExtender.merge();
+
+    if (universal) {
+        return FormulaEnvironment::UniversalFormula(f, variables);
+    }
+
+    return FormulaEnvironment::ExistentialFormula(f, variables);
+
+    CASE_END
+    CASE_BEGIN
+
+    expectToken(L"(");
+    Formula f = parseImpEqu();
+    expectToken(L")");
+    dictionaryExtender.merge();
+
+    return f;
+
+    CASE_END
+    CASE_BEGIN
+    getToken(token);
+
+    if (token.size()>2 && token[1]==L'_') {
+        if (token[0]!=L'R') {
+            throw(RelationExpectedException());
+        }
+
+        token = token.substr(2);
+    }
+
+    Symbol s = dictionary(token);
+
+    if (s.type!= NONE_SYMBOL && s.type!=RELATION) {
+        throw(RelationExpectedException());
+    }
+
+    std::vector<Term> terms = parseTermList();
+    RelationSymbol r = getRelation(token, name, terms.size());
+
+    dictionaryExtender.merge();
+
+    return FormulaEnvironment::RelationFormula(r, terms);
+
+    CASE_END
+
+    throw(FormulaExpectedException());
+}
+
+Formula Reader::parseConDis()
+{
+    CASE_BEGIN
+
+    std::vector<Formula> formulas;
+    bool conjunction = false;
+    std::wstring token;
+
+    while (true) {
+        Formula f = parseFirstSubformula();
+
+        formulas.push_back(f);
+        CASE_BEGIN
+        getToken(token);
+        toLower(token);
+
+        if (token==L"and") {
+            if (conjunction==false && formulas.size()>1) {
+                throw(ConjunctionExpectedException());
+            }
+
+            conjunction = true;
+        } else if (token==L"or") {
+            if (conjunction && formulas.size()>1) {
+                throw(DisjunctionExpectedException());
+            }
+
+            conjunction = false;
+        } else {
+            throw(ConjunctionOrDisjunctionExpectedException());
+        }
+
+        continue;
+
+        CASE_END
+
+        break;
     }
 
     if (formulas.empty()) {
         throw(FormulaExpectedException());
     }
 
-    extender.merge();
+    dictionaryExtender.merge();
 
     if (formulas.size()==1) {
         return formulas[0];
     }
 
     if (conjunction) {
-        return FormulaEnvironment::ConjunctionFormula(std::move(formulas));
+        return FormulaEnvironment::ConjunctionFormula(formulas);
     }
 
-    return FormulaEnvironment::DisjunctionFormula(std::move(formulas));
+    return FormulaEnvironment::DisjunctionFormula(formulas);
+
+    CASE_END
+
+    throw(ConjunctionOrDisjunctionExpectedException());
 }
 
-Formula Reader::parseImpEqu(const std::wstring &str, Dictionary &dictionary, size_t &pos) const
+Formula Reader::parseImpEqu()
 {
     std::vector<bool> connectives;
     std::vector<Formula> formulas;
-    DictionaryExtender extender(dictionary);
+    std::wstring token;
+
+    CASE_BEGIN
 
     while (true) {
         bool impl;
         bool equiv;
+        Formula f = parseConDis();
 
-        try {
-            Formula f = parseConDis(str, dictionary, pos);
+        formulas.push_back(f);
+        CASE_BEGIN
+        getToken(token);
+        toLower(token);
+        impl = token==L"imp";
+        equiv = impl==false && token==L"equ";
 
-            formulas.push_back(f);
-
-            std::wstring token;
-            size_t p = pos;
-            bool end = false;
-
-            try {
-                getToken(str, pos, token);
-            } catch(UnexpectedEndException&) {
-                end = true;
-            }
-
-            if (end) {
-                break;
-            }
-
-            toLower(token);
-            impl = token==L"imp";
-            equiv = impl==false && token==L"equ";
-
-            if (impl==false && equiv==false) {
-                pos = p;
-
-                break;
-            }
-
-            connectives.push_back(impl);
-        } catch(const Exception &e) {
-            throw(e);
+        if (impl==false && equiv==false) {
+            throw(ImplicationOrEquivalenceExpectedException());
         }
+
+        connectives.push_back(impl);
+
+        continue;
+
+        CASE_END
+
+        break;
     }
 
     if (formulas.empty()) {
         throw(FormulaExpectedException());
     }
 
-    extender.merge();
+    dictionaryExtender.merge();
 
     if (formulas.size()==1) {
         return formulas[0];
@@ -1112,7 +1235,7 @@ Formula Reader::parseImpEqu(const std::wstring &str, Dictionary &dictionary, siz
 
     std::vector<Formula> result;
     size_t i = 0;
-    size_t j = 1;
+    size_t j = 0;
 
     while (j<connectives.size()) {
         while (j<connectives.size() && connectives[i]==connectives[j]) {
@@ -1132,7 +1255,6 @@ Formula Reader::parseImpEqu(const std::wstring &str, Dictionary &dictionary, siz
         }
 
         i = j;
-        ++j;
     }
 
     if (result.size()==1) {
@@ -1140,22 +1262,13 @@ Formula Reader::parseImpEqu(const std::wstring &str, Dictionary &dictionary, siz
     }
 
     return FormulaEnvironment::ConjunctionFormula(std::move(result));
+
+    CASE_END
+
+    throw(ImplicationOrEquivalenceExpectedException());
 }
 
-Formula Reader::parseFormula(const std::wstring &str, Dictionary &dictionary, size_t &pos) const
+Formula Reader::parseFormula()
 {
-    return parseImpEqu(str, dictionary, pos);
-}
-
-Formula Reader::parseFormula(const std::wstring &str, Dictionary &dictionary) const
-{
-    size_t pos = 0;
-
-    Formula result = parseFormula(str, dictionary, pos);
-
-    if (pos<str.size()) {
-        throw(FormulaExpectedException());
-    }
-
-    return result;
+    return parseImpEqu();
 }

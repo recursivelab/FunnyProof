@@ -26,13 +26,6 @@
      </widget>
     </item>
     <item>
-     <widget class="QPushButton" name="okButton">
-      <property name="text">
-       <string>OK</string>
-      </property>
-     </widget>
-    </item>
-    <item>
      <widget class="QPlainTextEdit" name="output">
       <property name="font">
        <font>
@@ -53,7 +46,7 @@
      <x>0</x>
      <y>0</y>
      <width>800</width>
-     <height>21</height>
+     <height>19</height>
     </rect>
    </property>
   </widget>
@@ -62,23 +55,23 @@
  <resources/>
  <connections>
   <connection>
-   <sender>okButton</sender>
-   <signal>clicked()</signal>
+   <sender>input</sender>
+   <signal>textChanged()</signal>
    <receiver>MainWindow</receiver>
-   <slot>okButtonPressed()</slot>
+   <slot>textChanged()</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>313</x>
-     <y>297</y>
+     <x>131</x>
+     <y>115</y>
     </hint>
     <hint type="destinationlabel">
-     <x>314</x>
-     <y>286</y>
+     <x>141</x>
+     <y>297</y>
     </hint>
    </hints>
   </connection>
  </connections>
  <slots>
-  <slot>okButtonPressed()</slot>
+  <slot>textChanged()</slot>
  </slots>
 </ui>
