@@ -21,6 +21,7 @@
 #include "ui_mainwindow.h"
 #include "error.h"
 #include "readwrite.h"
+#include "theory.h"
 
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
@@ -41,4 +42,93 @@ void MainWindow::print(const QString &s)
 
 void MainWindow::textChanged()
 {
+
+    ui->output->clear();
+
+    {
+        Dictionary d;
+        Reader r(ui->input->toPlainText().toStdWString(), d);
+
+        try {
+//            Writer w;
+//            Term t = r.parseTerm();
+
+//            print(QString::fromStdWString(w(t, d)));
+
+//            if (r.pos<r.str.size()) {
+//                QString message = QString::fromStdWString(r.messageText);
+
+//                message += "\n------------------\n";
+//                message += QString::fromStdWString(r.str.substr(r.messagePos));
+//                print(message);
+//            }
+        } catch(const Exception &e) {
+            QString message = QString::fromStdWString(r.messageText);
+
+            message += "\n------------------\n";
+            message += QString::fromStdWString(r.str.substr(r.messagePos));
+            print(message);
+            message += "\n------------------\n";
+            print(QString::fromStdWString(e.description));
+        }
+    }
+
+    try {
+        Dictionary d;
+        Reader r(ui->input->toPlainText().toStdWString(), d);
+        Writer w;
+        Formula f = r.parseFormula();
+        std::vector<Formula> args;
+        std::set<Variable> vars;
+
+        print(QString::fromStdWString(w(f,d)));
+        print("System:");
+
+        Goal g;
+        System s;
+
+        g.insert(FormulaEnvironment::NegationFormula(f));
+        s.insert(g);
+        systemToLiterals(s);
+        produceInequalities(s);
+        removeEqualityInequalityContradictions(s);
+
+        for (auto i = s.cbegin(); i!=s.cend(); ++i) {
+            const Goal &goal = *i;
+
+            print("Goal:");
+
+            for (auto j = goal.cbegin(); j!=goal.cend(); ++j) {
+                print(QString::fromStdWString(w(*j, d)));
+            }
+
+            print("Classes:");
+
+            std::vector<std::set<Term>> c = equivalenceClasses(goal);
+
+            for (size_t j = 0; j<c.size(); ++j) {
+                QString str("{");
+                std::set<Term> s = c[j];
+
+                for (auto k = s.cbegin(); k!=s.cend(); ++k) {
+                    if (k!=s.cbegin()) {
+                        str += ", ";
+                    }
+
+                    str += QString::fromStdWString(w(*k, d));
+                }
+
+                str += "}";
+                print(str);
+            }
+        }
+
+        if (concludeContradiction(s)) {
+            print("Yes");
+        } else {
+            print("No");
+        }
+    } catch(const Exception &e) {
+        print(QString::fromStdWString(e.description));
+    }
 }

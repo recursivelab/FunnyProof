@@ -18,7 +18,8 @@ SOURCES += \
     language.cpp \
     main.cpp \
     readwrite.cpp \
-    utility.cpp
+    utility.cpp \
+    theory.cpp
 
 HEADERS  += \
     config.h \
@@ -30,6 +31,7 @@ HEADERS  += \
     mainwindow.h \
     readwrite.h \
     utility.h \
-    utility_imp.h
+    utility_imp.h \
+    theory.h
 
 FORMS    += mainwindow.ui

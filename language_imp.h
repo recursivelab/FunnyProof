@@ -463,7 +463,7 @@ size_t TermEnvironment::TermPrivate::hash() const
 
 bool TermEnvironment::TermPrivate::isFreeVariable(const Variable &variable) const
 {
-    switch (symbol.id) {
+    switch (symbol.type) {
     case NONE_SYMBOL: case FALSE_SYMBOL: case TRUE_SYMBOL:
         return false;
 
@@ -800,20 +800,19 @@ Substitution TermEnvironment::unificator(std::vector<std::pair<Term, Term>> &con
         }
 
         if (u.type()==VARIABLE || v.type()==VARIABLE) {
-            const Variable *x;
+            const Term *variable;
             const Term *t;
 
             if (u.type()==VARIABLE) {
-                const Variable var(u.symbol());
-
-                x = &var;
+                variable = &u;
                 t = &v;
             } else {
-                const Variable var(v.symbol());
-
-                x = &var;
+                variable = &v;
                 t = &u;
             }
+
+            const Variable var(variable->symbol());
+            const Variable *x = &var;
 
             if (t->isFreeVariable(*x)) {
                 ok = false;
@@ -822,15 +821,7 @@ Substitution TermEnvironment::unificator(std::vector<std::pair<Term, Term>> &con
                 return result;
             }
 
-//            std::map<Variable, Term> update;
-
-//            update.insert(std::pair<Variable, Term>(*x, *t));
-
-//            for (std::map<Variable, Term>::iterator i = result.begin(); i!=result.end(); ++i) {
-//                update.insert(std::pair<Variable, Term>(i->first, i->second[Substitution(*x, *t)]));
-//            }
-
-//            result = update;
+            conditions.pop_back();
             result = Substitution(*x, *t)[result].data;
 
             continue;
@@ -859,6 +850,15 @@ Substitution TermEnvironment::unificator(std::vector<std::pair<Term, Term>> &con
     ok = true;
 
     return result;
+}
+
+Substitution TermEnvironment::unificator(const Term &t1, const Term &t2, bool &ok)
+{
+    std::vector<std::pair<Term, Term>> v;
+
+    v.push_back(std::pair<Term, Term>(t1, t2));
+
+    return unificator(v, ok);
 }
 
 FormulaEnvironment::FormulaPrivate::FormulaPrivate() :
@@ -1437,6 +1437,20 @@ FormulaEnvironment::Formula FormulaEnvironment::Formula::operator [](const TermE
 
         break;
 
+    case NONEQUALITY:
+    {
+        const std::vector<Term> &terms = formula.terms;
+        std::vector<Term> result;
+
+        for (size_t i = 0; i < terms.size(); ++i) {
+            result.push_back(terms[i][substitution]);
+        }
+
+        return NonequalityFormula(std::move(result));
+    }
+
+        break;
+
     case NEGATION:
         return NegationFormula(formula.formulas[0][substitution]);
 
@@ -1809,7 +1823,7 @@ FormulaEnvironment::Formula FormulaEnvironment::Formula::simplify() const
                 size_t k = j->second;
                 size_t value = representers[k-begin];
 
-                for (size_t l = value+1-begin; l<representers.size(); ++l) {
+                for (size_t l = k+1-begin; l<representers.size(); ++l) {
                     representers[l] = value;
                 }
 
@@ -1830,8 +1844,6 @@ FormulaEnvironment::Formula FormulaEnvironment::Formula::simplify() const
             }
         }
 
-        std::vector<Formula> equivalences;
-
         for (auto i = groups.cbegin(); i!=groups.cend(); ++i) {
             const std::set<Formula> &g = i->second;
             std::vector<Formula> args;
@@ -1840,21 +1852,28 @@ FormulaEnvironment::Formula FormulaEnvironment::Formula::simplify() const
                 args.push_back(*j);
             }
 
-            if (args.size()==1U) {
-                equivalences.push_back(args[0]);
-            } else {
-                equivalences.push_back(EquivalenceFormula(args));
+            if (i!=groups.cbegin() && args.empty()==false) {
+                auto j = i;
+
+                --j;
+
+                const std::set<Formula> &s = j->second;
+
+                if (s.empty()==false) {
+                    auto k = s.cend();
+
+                    --k;
+                    result.push_back(ImplicationFormula(*k, args[0]));
+                }
+            }
+
+            if (args.size()>1U) {
+                result.push_back(EquivalenceFormula(args));
             }
         }
 
-        if (equivalences.size()==formulas().size()) {
-            return ImplicationFormula(equivalences);
-        }
-
-        if (equivalences.size()==1) {
-            result.push_back(TrueFormula());
-        } else if (equivalences.size()>1) {
-            result.push_back(ImplicationFormula(equivalences));
+        if (result.size()==formulas().size()) {
+            return ImplicationFormula(result);
         }
 
         return ConjunctionFormula(result);
@@ -1971,6 +1990,444 @@ FormulaEnvironment::Formula FormulaEnvironment::Formula::simplify() const
     }
 
     return *this;
+}
+
+UniformType FormulaEnvironment::Formula::uniformType(std::vector<Formula> &args, std::set<Variable> &vars) const
+{
+    args.clear();
+    vars.clear();
+
+    switch (type()) {
+    case NONE_SYMBOL:
+        return NONE_UNIFORM_TYPE;
+
+        break;
+
+    case TRUE_SYMBOL:
+    case FALSE_SYMBOL:
+    case RELATION:
+        args.push_back(*this);
+
+        return LITERAL;
+
+        break;
+
+    case EQUALITY:
+    {
+        std::set<Term> s;
+
+        for (size_t i = 0; i<terms().size(); ++i) {
+            s.insert(terms()[i]);
+        }
+
+        switch (s.size()) {
+        case 0:
+        case 1:
+            args.push_back(TrueFormula());
+
+            return LITERAL;
+
+            break;
+
+        case 2:
+        {
+            auto i = s.cbegin();
+            Term t1 = *i;
+
+            ++i;
+
+            Term t2 = *i;
+
+            args.push_back(EqualityFormula(t1, t2));
+
+            return LITERAL;
+        }
+
+        default:
+        {
+            auto lastByOne = s.cend();
+
+            --lastByOne;
+            --lastByOne;
+
+            for (auto i = s.cbegin(); i!=lastByOne; ++i) {
+                auto j = i;
+
+                ++j;
+                args.push_back(EqualityFormula(*i, *j));
+            }
+
+            return ALPHA;
+
+            break;
+        }
+            break;
+        }
+    }
+
+    case NONEQUALITY:
+    {
+        std::set<Term> s;
+
+        for (size_t i = 0; i<terms().size(); ++i) {
+            s.insert(terms()[i]);
+        }
+
+        if (s.size()!=terms().size()) {
+            args.push_back(FalseFormula());
+
+            return LITERAL;
+        }
+
+        switch (s.size()) {
+        case 0:
+        case 1:
+            args.push_back(TrueFormula());
+
+            return LITERAL;
+
+            break;
+
+        case 2:
+        {
+            auto i = s.cbegin();
+            Term t1 = *i;
+
+            ++i;
+
+            Term t2 = *i;
+
+            args.push_back(NonequalityFormula(t1, t2));
+
+            return LITERAL;
+        }
+
+        default:
+        {
+            auto second = s.cbegin();
+
+            ++second;
+
+            for (auto i = second; i!=s.cend(); ++i) {
+                for (auto j = s.cbegin(); j!=i; ++j) {
+                    args.push_back(NonequalityFormula(*i, *j));
+                }
+            }
+
+            return ALPHA;
+
+            break;
+        }
+            break;
+        }
+    }
+
+    case NEGATION:
+        switch (formulas()[0].uniformType(args, vars)) {
+        case NONE_UNIFORM_TYPE:
+            return NONE_UNIFORM_TYPE;
+
+            break;
+
+        case LITERAL:
+        {
+            Formula f = args[0];
+
+            args.clear();
+
+            switch (f.type()) {
+            case FALSE_SYMBOL:
+                args.push_back(TrueFormula());
+
+                break;
+
+            case TRUE_SYMBOL:
+                args.push_back(FalseFormula());
+
+                break;
+
+            case NEGATION:
+                args.push_back(f.formulas()[0]);
+
+                break;
+
+            case EQUALITY:
+                args.push_back(NonequalityFormula(f.terms()));
+
+                break;
+
+            case NONEQUALITY:
+                args.push_back(EqualityFormula(f.terms()));
+
+                break;
+
+            default:
+                args.push_back(NegationFormula(f));
+
+                break;
+            }
+
+            return LITERAL;
+        }
+
+        case ALPHA:
+        {
+            std::vector<Formula> result;
+
+            for (size_t i = 0; i<args.size(); ++i) {
+                result.push_back(NegationFormula(args[i]));
+            }
+
+            args = std::move(result);
+
+            return BETA;
+
+            break;
+        }
+
+
+        case BETA:
+        {
+            std::vector<Formula> result;
+
+            for (size_t i = 0; i<args.size(); ++i) {
+                result.push_back(NegationFormula(args[i]));
+            }
+
+            args = std::move(result);
+
+            return ALPHA;
+
+            break;
+        }
+
+        case GAMMA:
+        {
+            Formula f = args[0];
+
+            args.clear();
+            args.push_back(NegationFormula(f));
+
+            return DELTA;
+
+            break;
+        }
+
+        case DELTA:
+        {
+            Formula f = args[0];
+
+            args.clear();
+            args.push_back(NegationFormula(f));
+
+            return GAMMA;
+
+            break;
+        }
+
+        default:
+            throw(1);
+
+            break;
+        }
+
+    case CONJUNCTION:
+    {
+        std::set<Formula> s;
+
+        for (size_t i = 0; i<formulas().size(); ++i) {
+            s.insert(formulas()[i]);
+        }
+
+        args.clear();
+
+        switch (s.size()) {
+        case 0:
+            args.push_back(TrueFormula());
+
+            return LITERAL;
+
+            break;
+
+        case 1:
+            return formulas()[0].uniformType(args, vars);
+
+            break;
+
+        default:
+        {
+            for (auto i = s.cbegin(); i!=s.cend(); ++i) {
+                args.push_back(*i);
+            }
+
+            return ALPHA;
+        }
+
+            break;
+        }
+    }
+
+    case DISJUNCTION:
+    {
+        std::set<Formula> s;
+
+        for (size_t i = 0; i<formulas().size(); ++i) {
+            s.insert(formulas()[i]);
+        }
+
+        args.clear();
+
+        switch (s.size()) {
+        case 0:
+            args.push_back(TrueFormula());
+
+            return LITERAL;
+
+            break;
+
+        case 1:
+            return formulas()[0].uniformType(args, vars);
+
+            break;
+
+        default:
+        {
+            for (auto i = s.cbegin(); i!=s.cend(); ++i) {
+                args.push_back(*i);
+            }
+
+            return BETA;
+        }
+
+            break;
+        }
+    }
+
+    case IMPLICATION:
+    {
+        std::vector<Formula> result;
+
+        for (size_t i = 0; i<formulas().size(); ++i) {
+            if (i==0 || formulas()[i]!=formulas()[i-1]) {
+                result.push_back(formulas()[i]);
+            }
+        }
+
+        switch (result.size()) {
+        case 0:
+        case 1:
+            args.push_back(TrueFormula());
+
+            return LITERAL;
+
+            break;
+
+        case 2:
+        {
+            Formula f = result[0];
+            Formula g = result[1];
+
+            args.push_back(NegationFormula(result[0]));
+            args.push_back(result[1]);
+
+            return BETA;
+
+            break;
+        }
+
+        default:
+        {
+            for (size_t i = 1; i<result.size(); ++i) {
+                args.push_back(ImplicationFormula(result[i-1], result[i]));
+            }
+
+            return ALPHA;
+
+            break;
+        }
+        }
+    }
+
+    case EQUIVALENCE:
+    {
+        std::set<Formula> s;
+
+        for (size_t i = 0; i<formulas().size(); ++i) {
+            s.insert(formulas()[i]);
+        }
+
+        switch (s.size()) {
+        case 0:
+        case 1:
+            args.push_back(TrueFormula());
+
+            return LITERAL;
+
+            break;
+
+        default:
+        {
+            std::vector<Formula> positive;
+            std::vector<Formula> negative;
+
+            for (auto i = s.cbegin(); i!=s.cend(); ++i) {
+                positive.push_back(*i);
+                negative.push_back(NegationFormula(*i));
+            }
+
+            args.push_back(ConjunctionFormula(positive));
+            args.push_back(ConjunctionFormula(negative));
+
+            return BETA;
+
+            break;
+        }
+        }
+    }
+
+    case UNIVERSAL:
+    {
+        for (size_t i = 0; i<variables().size(); ++i) {
+            if (formulas()[0].getFreeVariables().count(variables()[i])) {
+                vars.insert(variables()[i]);
+            }
+        }
+
+        args.push_back(formulas()[0]);
+
+        if (vars.empty()) {
+            return formulas()[0].uniformType(args, vars);
+        }
+
+        return GAMMA;
+
+        break;
+    }
+
+    case EXISTENTIAL:
+    {
+        for (size_t i = 0; i<variables().size(); ++i) {
+            if (formulas()[0].getFreeVariables().count(variables()[i])) {
+                vars.insert(variables()[i]);
+            }
+        }
+
+        args.push_back(formulas()[0]);
+
+        if (vars.empty()) {
+            return formulas()[0].uniformType(args, vars);
+        }
+
+        return DELTA;
+
+        break;
+    }
+
+    default:
+        throw(1);
+
+        break;
+    }
 }
 
 FormulaEnvironment::EmptyFormula::EmptyFormula()

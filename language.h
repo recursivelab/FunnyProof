@@ -338,10 +338,21 @@ public:
     DECLARE static std::vector<Term> oneTerm(const Term &term);
     DECLARE static std::vector<Term> twoTerms(const Term &term1, const Term &term2);
     DECLARE static Substitution unificator(std::vector<std::pair<Term, Term>> &conditions, bool &ok);
+    DECLARE static Substitution unificator(const Term &t1, const Term &t2, bool &ok);
 };
 
 typedef TermEnvironment::Term Term;
 typedef TermEnvironment::Substitution Substitution;
+
+enum UniformType
+{
+    NONE_UNIFORM_TYPE,
+    ALPHA,
+    BETA,
+    GAMMA,
+    DELTA,
+    LITERAL
+};
 
 class FormulaEnvironment
 {
@@ -520,6 +531,7 @@ public:
         DECLARE Formula operator [](const TermEnvironment::Substitution &substitution) const;
         DECLARE static const Formula& dummy();
         DECLARE Formula simplify() const;
+        DECLARE UniformType uniformType(std::vector<Formula> &args, std::set<Variable> &vars) const;
 
         friend struct FalseFormula;
         friend struct TrueFormula;

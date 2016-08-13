@@ -49,28 +49,6 @@ public:
     }
 };
 
-//class PositionSaver
-//{
-//    size_t oldPos;
-//    size_t &pos;
-//    size_t &lastPos;
-
-//public:
-//    PositionSaver(size_t &pos, size_t lastPos) :
-//        oldPos(pos),
-//        pos(pos),
-//        lastPos(lastPos)
-//    {
-//        lastPos = pos;
-//    }
-
-//    ~PositionSaver()
-//    {
-//        lastPos = pos;
-//        pos = oldPos;
-//    }
-//};
-
 #define EXTEND_DICTIONARY DictionaryExtender extender(dictionary)
 #define CASE_BEGIN \
 {\
@@ -383,7 +361,7 @@ std::wstring Writer::operator ()(const Formula &formula, const Dictionary &dicti
     case NEGATION:
         result = operator ()(formula.formulas()[0], dictionary, &type);
         insertBracketsIfNeeded(formula.type(), type, result);
-        type = NEGATION;
+        type = formula.type();
         result = symbolic.negationSymbol+result;
 
         break;
@@ -405,6 +383,7 @@ std::wstring Writer::operator ()(const Formula &formula, const Dictionary &dicti
             result = operator ()(formula.formulas()[0], dictionary);
 
             break;
+
         default:
             result = operator ()(formula.formulas()[0], dictionary, &type);
             insertBracketsIfNeeded(formula.type(), type, result);
@@ -441,9 +420,9 @@ std::wstring Writer::operator ()(const Formula &formula, const Dictionary &dicti
                 insertBracketsIfNeeded(formula.type(), type, tmp);
                 result += tmp;
             }
-
-            type = formula.type();
         }
+
+        type = formula.type();
 
         break;
 
@@ -467,6 +446,8 @@ std::wstring Writer::operator ()(const Formula &formula, const Dictionary &dicti
             insertBracketsIfNeeded(formula.type(), type, tmp);
             result += tmp;
         }
+
+        type = formula.type();
 
         break;
 
@@ -535,6 +516,7 @@ void Reader::getToken(std::wstring &token)
     case L'∀':
     case L'∃':
     case L'=':
+    case L'.':
         token.push_back(ch);
         ++pos;
 
@@ -981,6 +963,7 @@ Formula Reader::parseFirstSubformula()
 
     Term t = parseTerm();
     std::vector<Term> terms;
+    bool nonequality = false;
 
     terms.push_back(t);
 
@@ -990,12 +973,14 @@ Formula Reader::parseFirstSubformula()
 
         if (token==L"=") {
             terms.push_back(parseTerm());
+            dictionaryExtender.merge();
         } else if (token==L"neq") {
             if (terms.size()==1) {
                 terms.push_back(parseTerm());
+                nonequality = true;
                 dictionaryExtender.merge();
 
-                return FormulaEnvironment::NonequalityFormula(terms);
+                break;
             }
 
             throw(UnexpectedNonequalityException());
@@ -1008,6 +993,12 @@ Formula Reader::parseFirstSubformula()
         CASE_END
 
         break;
+    }
+
+    if (nonequality) {
+        dictionaryExtender.merge();
+
+        return FormulaEnvironment::NonequalityFormula(terms);
     }
 
     if (terms.size()==1) {
@@ -1270,5 +1261,14 @@ Formula Reader::parseImpEqu()
 
 Formula Reader::parseFormula()
 {
-    return parseImpEqu();
+    CASE_BEGIN
+    Formula result = parseImpEqu();
+
+    expectToken(L".");
+    dictionaryExtender.merge();
+
+    return result;
+    CASE_END
+
+    throw(FormulaExpectedException());
 }
