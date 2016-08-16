@@ -331,7 +331,16 @@ std::wstring Writer::operator ()(const Formula &formula, const Dictionary &dicti
             result += symbolic.nonequalitySymbol;
             result += (*this)(formula.terms()[1], dictionary);
         } else {
-            throw(1);
+            result += symbolic.nonequalitySymbol+symbolic.leftRelationBracket;
+
+            for (size_t i = 0; i<formula.terms().size(); ++i) {
+                if (i!=0) {
+                    result += symbolic.relationSeparatorSymbol;
+                    result += (*this)(formula.terms()[i], dictionary);
+                }
+            }
+
+            result += symbolic.rightRelationBracket;
         }
 
         break;

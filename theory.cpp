@@ -1,6 +1,10 @@
 #include <algorithm>
 #include "theory.h"
 
+#include <iostream>
+#include "readwrite.h"
+using namespace std;
+
 typedef std::set<Formula> Goal;
 
 bool operator ==(const Goal &first, const Goal &second)
@@ -147,7 +151,7 @@ bool tryLiteral(System &goals)
                 if (f.type()==TRUE_SYMBOL) {
                     Goal g = goal;
 
-                    g.erase(j);
+                    g.erase(*j);
                     goals.erase(i);
                     goals.insert(g);
 
@@ -606,53 +610,104 @@ bool concludeContradiction(const System &system)
     removeSupergoals(goals);
     removeEqualityInequalityContradictions(goals);
 
-    for (auto i = goals.cbegin(); i!=goals.cend(); ++i) {
-        const Goal &goal = *i;
-        auto c = equivalenceClasses(goal);
+    if (goals.empty()) {
+        return true;
+    }
 
-        for (auto j = goal.cbegin(); j!=goal.cend(); ++j) {
-            const Formula &formula = *j;
+    const Goal &goal = *(goals.cbegin());
+    auto c = equivalenceClasses(goal);
 
-            if (formula.type()==NONEQUALITY) {
-                for (size_t k = 1; k<formula.terms().size(); ++k) {
-                    const Term &t1 = formula.terms()[k];
+    for (auto j = goal.cbegin(); j!=goal.cend(); ++j) {
+        const Formula &formula = *j;
 
-                    size_t p1;
+        if (formula.type()==NONEQUALITY) {
+            for (size_t k = 1; k<formula.terms().size(); ++k) {
+                const Term &t1 = formula.terms()[k];
 
-                    for (p1 = 0; p1<c.size(); ++p1) {
-                        if (c[p1].count(t1)>0) {
+                size_t p1;
+
+                for (p1 = 0; p1<c.size(); ++p1) {
+                    if (c[p1].count(t1)>0) {
+                        break;
+                    }
+                }
+
+                const std::set<Term> &c1 = c[p1];
+
+                for (size_t l = 0; l<k; ++l) {
+                    const Term &t2 = formula.terms()[l];
+                    size_t p2;
+
+                    for (p2 = 0; p2<c.size(); ++p2) {
+                        if (c[p2].count(t2)>0) {
                             break;
                         }
                     }
 
-                    const std::set<Term> &c1 = c[p1];
+                    const std::set<Term> &c2 = c[p2];
 
-                    for (size_t l = 0; l<k; ++l) {
-                        const Term &t2 = formula.terms()[l];
-                        size_t p2;
+                    for (auto q1 = c1.cbegin(); q1!=c1.cend(); ++q1) {
+                        for (auto q2 = c2.cbegin(); q2!=c2.cend(); ++q2) {
+                            bool ok;
+                            Substitution substitution = TermEnvironment::unificator(t1, t2, ok);
 
-                        for (p2 = 0; p2<c.size(); ++p2) {
-                            if (c[p2].count(t2)>0) {
-                                break;
+                            if (ok) {
+                                System newSystem;
+
+                                for (auto g = goals.cbegin(); g!=goals.cend(); ++g) {
+                                    if (g!=goals.cbegin()) {
+                                        Goal newGoal;
+
+                                        for (auto f = g->cbegin(); f!=g->cend(); ++f) {
+                                            newGoal.insert((*f)[substitution]);
+                                        }
+
+                                        newSystem.insert(newGoal);
+                                    }
+                                }
+
+                                if (concludeContradiction(newSystem)) {
+                                    return true;
+                                }
                             }
                         }
+                    }
+                }
+            }
+        }
+    }
 
-                        if (p1==p2) {
-                            return true;
-                        }
+    for (auto j = goal.cbegin(); j!=goal.cend(); ++j) {
+        const Formula &formula = *j;
 
-                        const std::set<Term> &c2 = c[p2];
+        if (formula.type()==NONEQUALITY) {
+            for (size_t k = 1; k<formula.terms().size(); ++k) {
+                const Term &t1 = formula.terms()[k];
 
-                        for (auto q1 = c1.cbegin(); q1!=c1.cend(); ++q1) {
-                            for (auto q2 = c2.cbegin(); q2!=c2.cend(); ++q2) {
+                for (size_t l = 0; l<k; ++l) {
+                    const Term &t2 = formula.terms()[l];
+
+                    for (auto cl = c.cbegin(); cl!=c.cend(); ++cl) {
+                        const std::set<Term> &cls = *cl;
+
+                        for (auto tm1 = cls.cbegin(); tm1!=cls.cend(); ++tm1) {
+                            Term trm1 = *tm1;
+
+                            for (auto tm2 = cls.cbegin(); tm2!=cls.cend(); ++tm2) {
+                                Term trm2 = *tm2;
                                 bool ok;
-                                Substitution substitution = TermEnvironment::unificator(t1, t2, ok);
+                                std::vector<std::pair<Term, Term>> unificationTask;
+
+                                unificationTask.push_back(std::pair<Term, Term>(t1, trm1));
+                                unificationTask.push_back(std::pair<Term, Term>(t2, trm2));
+
+                                Substitution substitution =TermEnvironment::unificator(unificationTask, ok);
 
                                 if (ok) {
                                     System newSystem;
 
                                     for (auto g = goals.cbegin(); g!=goals.cend(); ++g) {
-                                        if (g!=i) {
+                                        if (g!=goals.cbegin()) {
                                             Goal newGoal;
 
                                             for (auto f = g->cbegin(); f!=g->cend(); ++f) {

@@ -37,49 +37,79 @@ MainWindow::~MainWindow()
 
 void MainWindow::print(const QString &s)
 {
-    ui->output->appendPlainText(s);
+    ui->automatedProofAnalysis->appendPlainText(s);
 }
 
-void MainWindow::textChanged()
+void MainWindow::updateProof()
 {
+    ui->proofAnalysis->clear();
 
-    ui->output->clear();
+    Dictionary d;
 
-    {
-        Dictionary d;
-        Reader r(ui->input->toPlainText().toStdWString(), d);
+    try {
+        Reader r(ui->axioms->toPlainText().toStdWString(), d);
+        Formula axiom = r.parseFormula();
+        Writer w;
 
-        try {
-//            Writer w;
-//            Term t = r.parseTerm();
+        ui->proofAnalysis->appendPlainText("Axiom:");
+        ui->proofAnalysis->appendPlainText(QString::fromStdWString(w(axiom, d)));
 
-//            print(QString::fromStdWString(w(t, d)));
+        Reader r1(ui->goal->text().toStdWString(), d);
+        Formula goal = r1.parseFormula();
 
-//            if (r.pos<r.str.size()) {
-//                QString message = QString::fromStdWString(r.messageText);
+        ui->proofAnalysis->appendPlainText("Goal:");
+        ui->proofAnalysis->appendPlainText(QString::fromStdWString(w(goal, d)));
 
-//                message += "\n------------------\n";
-//                message += QString::fromStdWString(r.str.substr(r.messagePos));
-//                print(message);
-//            }
-        } catch(const Exception &e) {
-            QString message = QString::fromStdWString(r.messageText);
+        std::set<Formula> s;
 
-            message += "\n------------------\n";
-            message += QString::fromStdWString(r.str.substr(r.messagePos));
-            print(message);
-            message += "\n------------------\n";
-            print(QString::fromStdWString(e.description));
+        s.insert(axiom);
+
+        Theory t(s);
+        Reader r2(ui->proof->toPlainText().toStdWString(), d);
+
+        ui->proofAnalysis->appendPlainText("Proof:");
+
+        std::vector<Formula> proof;
+
+        while (t.draw(goal)==false) {
+            bool end = false;
+
+            try {
+                Formula f = r2.parseFormula();
+
+                proof.push_back(f);
+
+                if (t.draw(f)) {
+                    ui->proofAnalysis->appendPlainText(QString::fromStdWString(w(f, d)));
+                } else {
+                    end = true;
+                }
+            } catch(...) {
+                end = true;
+            }
+
+            if (end) {
+                break;
+            }
         }
+
+        if (t.draw(goal)) {
+            ui->proofAnalysis->appendPlainText("Success");
+        }
+
+    } catch(...) {
     }
+}
+
+void MainWindow::analysisFormulaChanged()
+{
+    ui->automatedProofAnalysis->clear();
 
     try {
         Dictionary d;
-        Reader r(ui->input->toPlainText().toStdWString(), d);
+        Reader r(ui->formulaForAnalysis->toPlainText().toStdWString(), d);
         Writer w;
         Formula f = r.parseFormula();
-        std::vector<Formula> args;
-        std::set<Variable> vars;
 
         print(QString::fromStdWString(w(f,d)));
         print("System:");
@@ -129,6 +159,36 @@ void MainWindow::textChanged()
             print("No");
         }
     } catch(const Exception &e) {
-        print(QString::fromStdWString(e.description));
+    }
+}
+
+void MainWindow::axiomChanged()
+{
+    updateProof();
+}
+
+void MainWindow::goalChanged()
+{
+    updateProof();
+}
+
+void MainWindow::proofChanged()
+{
+    updateProof();
+}
+
+void MainWindow::simplificationFormulaChanged()
+{
+    Dictionary d;
+    Writer w;
+
+    ui->simplificatedFormula->clear();
+
+    try {
+        Reader r(ui->formulaForSimplification->toPlainText().toStdWString(), d);
+        Formula f = r.parseFormula();
+
+        ui->simplificatedFormula->setPlainText(QString::fromStdWString(w(f.simplify(), d)));
+    } catch(...) {
     }
 }

@@ -37,9 +37,14 @@ public:
 private:
     Ui::MainWindow *ui;
     void print(const QString &s);
+    void updateProof();
 
 private slots:
-    void textChanged();
+    void analysisFormulaChanged();
+    void axiomChanged();
+    void goalChanged();
+    void proofChanged();
+    void simplificationFormulaChanged();
 };
 
 #endif // MAINWINDOW_H

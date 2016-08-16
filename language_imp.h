@@ -605,7 +605,7 @@ Substitution Substitution::operator [](const Substitution &other) const
     }
 
     for (std::map<Variable, Term>::const_iterator i = data.cbegin(); i!=data.cend(); ++i) {
-        if (other.data.find(i->first)==data.end()) {
+        if (other.data.find(i->first)==other.data.end()) {
             result.insert(*i);
         }
     }
@@ -822,6 +822,25 @@ Substitution TermEnvironment::unificator(std::vector<std::pair<Term, Term>> &con
             }
 
             conditions.pop_back();
+
+            std::vector<std::pair<Term, Term>> oldConditions(std::move(conditions));
+
+            conditions.clear();
+
+            std::map<Variable, Term> s;
+
+            s.insert(std::pair<Variable, Term>(*x, *t));
+
+            Substitution sub(s);
+
+            for (size_t i = 0; i<oldConditions.size(); ++i) {
+                auto p = oldConditions[i];
+                auto v = p.first;
+                auto t = p.second;
+
+                conditions.push_back(std::pair<Term, Term>(v[sub], t[sub]));
+            }
+
             result = Substitution(*x, *t)[result].data;
 
             continue;
@@ -2029,38 +2048,19 @@ UniformType FormulaEnvironment::Formula::uniformType(std::vector<Formula> &args,
 
             break;
 
-        case 2:
+        default:
         {
-            auto i = s.cbegin();
-            Term t1 = *i;
+            std::vector<Term> terms;
 
-            ++i;
+            for (auto i = s.cbegin(); i!=s.cend(); ++i) {
+                terms.push_back(*i);
+            }
 
-            Term t2 = *i;
-
-            args.push_back(EqualityFormula(t1, t2));
+            args.push_back(EqualityFormula(terms));
 
             return LITERAL;
         }
 
-        default:
-        {
-            auto lastByOne = s.cend();
-
-            --lastByOne;
-            --lastByOne;
-
-            for (auto i = s.cbegin(); i!=lastByOne; ++i) {
-                auto j = i;
-
-                ++j;
-                args.push_back(EqualityFormula(*i, *j));
-            }
-
-            return ALPHA;
-
-            break;
-        }
             break;
         }
     }
@@ -2088,36 +2088,19 @@ UniformType FormulaEnvironment::Formula::uniformType(std::vector<Formula> &args,
 
             break;
 
-        case 2:
+        default:
         {
-            auto i = s.cbegin();
-            Term t1 = *i;
+            std::vector<Term> terms;
 
-            ++i;
+            for (auto i = s.cbegin(); i!=s.cend(); ++i) {
+                terms.push_back(*i);
+            }
 
-            Term t2 = *i;
-
-            args.push_back(NonequalityFormula(t1, t2));
+            args.push_back(NonequalityFormula(terms));
 
             return LITERAL;
         }
 
-        default:
-        {
-            auto second = s.cbegin();
-
-            ++second;
-
-            for (auto i = second; i!=s.cend(); ++i) {
-                for (auto j = s.cbegin(); j!=i; ++j) {
-                    args.push_back(NonequalityFormula(*i, *j));
-                }
-            }
-
-            return ALPHA;
-
-            break;
-        }
             break;
         }
     }
