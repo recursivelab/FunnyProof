@@ -1,0 +1,51 @@
+Build instructions for using GMP on windows.
+
+1. Download Qt for Windows 32-bit MinGW.
+
+2. Run installer as administrator and install Qt for all users with all
+   available packages possibly without source code as only exception.
+
+3. Download MinGW (not MinGW-w64) installer and run it as administrator and
+   install it following next instructions.
+
+4. Update catalogue.
+
+5. Select all packages for instalation.
+
+6. Select all packages for update.
+
+7. Apply it.
+
+8. Repeat steps 4-7 until any new package or update exists.
+
+9. Download the latest version of GMP and unpack it for example in directory
+   C:\Downloads\gmp.
+
+10. Go to MinGW instalation directory then msys subdirectory, then 1.0
+    subdirectory and run msys.bat to open msys console.
+
+    We assume that instalation directory of MinGW is C:\MinGW and that gmp is
+unpacked to directory C:\Downloads\gmp. The last is path of configure file.
+
+11. In msys console type following comand lines:
+
+cd /C/Download/gmp
+./configure CC=/C/MinGW/bin/mingw32-gcc
+make
+make check
+
+    If no errors reported, a contents of directory C:\Downloads\gmp\.libs copy
+to the directory like C:\Qt\Qt5.6.0\5.6\mingw49_32\lib and *.h files from
+directory C:\Downloads\gmp to the directory like
+C:\Qt\Qt5.6.0\5.6\mingw49_32\include.
+
+Exact paths depending on Qt installation directory and installed version.
+
+To use it in Qt projects include headers like
+
+#include <gmp.h>
+
+where is needed amd add in *.pro file the lines
+
+LIBS += -lgmp
+
